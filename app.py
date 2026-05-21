@@ -669,48 +669,117 @@ st.plotly_chart(
 )
 
 # ======================================================
-# DETAIL HARIAN
+# DETAIL DATA HARIAN + SHIFT
 # ======================================================
 st.markdown("---")
 
 st.subheader("📅 Detail Data Harian")
 
+detail_shift = []
+
+for i in range(len(df_simulasi)):
+
+    tanggal = df_simulasi.loc[i, 'Tanggal']
+    bulan = df_simulasi.loc[i, 'Bulan']
+    suhu = df_simulasi.loc[i, 'Suhu']
+    hujan = df_simulasi.loc[i, 'Hujan']
+    libur = df_simulasi.loc[i, 'Hari_Libur']
+    promo = df_simulasi.loc[i, 'Ada_Promo']
+
+    for shift in [1, 2, 3]:
+
+        if shift == 1:
+            pengunjung = np.random.randint(8, 25)
+
+        elif shift == 2:
+            pengunjung = np.random.randint(20, 45)
+
+        else:
+            pengunjung = np.random.randint(10, 30)
+
+        if libur == 1:
+            pengunjung += 8
+
+        if promo == 1:
+            pengunjung += 5
+
+        if hujan > 7:
+            pengunjung -= 5
+
+        pengunjung = max(pengunjung, 5)
+
+        rata_belanja = np.random.randint(
+            12000,
+            18000
+        )
+
+        pendapatan = pengunjung * rata_belanja
+
+        detail_shift.append({
+
+            'Tanggal': tanggal,
+            'Bulan': bulan,
+            'Shift': f"Shift {shift}",
+            'Suhu °C': suhu,
+            'Hujan mm': hujan,
+
+            'Hari Libur':
+            "Ya" if libur == 1 else "Tidak",
+
+            'Promo':
+            "Ya" if promo == 1 else "Tidak",
+
+            'Pengunjung': pengunjung,
+
+            'Pendapatan':
+            f"Rp {pendapatan:,}".replace(",", ".")
+
+        })
+
+df_detail_shift = pd.DataFrame(detail_shift)
+
+# ======================================================
+# FILTER BULAN
+# ======================================================
 bulan_pilih = st.selectbox(
 
     "Pilih Bulan",
 
-    laporan_bulanan['Bulan']
+    df_detail_shift['Bulan']
+    .unique()
 
 )
 
-detail_harian = df_simulasi[
-    df_simulasi['Bulan'] == bulan_pilih
-][[
-    'Tanggal',
-    'Suhu',
-    'Hujan',
-    'Hari_Libur',
-    'Ada_Promo',
-    'Shift',
-    'Jumlah_Pengunjung',
-    'Pendapatan_Rp'
-]]
+# ======================================================
+# FILTER SHIFT
+# ======================================================
+shift_pilih = st.selectbox(
 
-detail_harian = detail_harian.rename(columns={
+    "Pilih Shift",
 
-    'Suhu': 'Suhu °C',
-    'Hujan': 'Hujan mm',
-    'Hari_Libur': 'Hari Libur',
-    'Ada_Promo': 'Promo',
-    'Shift': 'Shift Kerja',
-    'Jumlah_Pengunjung': 'Pengunjung',
-    'Pendapatan_Rp': 'Pendapatan'
+    ['Shift 1', 'Shift 2', 'Shift 3']
 
-})
+)
 
+# ======================================================
+# FILTER DATA
+# ======================================================
+hasil_filter = df_detail_shift[
+
+    (df_detail_shift['Bulan'] == bulan_pilih)
+
+    &
+
+    (df_detail_shift['Shift'] == shift_pilih)
+
+]
+
+# ======================================================
+# TAMPILKAN DATA
+# ======================================================
 st.dataframe(
 
-    detail_harian,
+    hasil_filter,
 
     use_container_width=True,
 
