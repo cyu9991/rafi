@@ -25,9 +25,8 @@ st.set_page_config(
 st.title("☕ Cafe Analytics AI Indonesia")
 
 st.write("""
-Sistem Analisis & Prediksi Kepadatan Pengunjung
-Café Menggunakan Artificial Intelligence
-(Random Forest Machine Learning)
+Sistem Analisis & Prediksi Kepadatan Pengunjung Café
+Menggunakan Machine Learning Random Forest
 """)
 
 # ======================================================
@@ -40,7 +39,7 @@ st.sidebar.write("NIM : Isi NIM")
 st.sidebar.write("Kampus : UNTAD")
 
 # ======================================================
-# API CUACA LIVE PALU
+# API CUACA LIVE
 # ======================================================
 url = (
     "https://api.open-meteo.com/v1/forecast"
@@ -69,7 +68,7 @@ except:
     live_rain = 0.0
 
 # ======================================================
-# GENERATE DATASET
+# GENERATE DATASET REALISTIS
 # ======================================================
 np.random.seed(42)
 
@@ -86,14 +85,14 @@ df_simulasi = pd.DataFrame({
     'Tanggal': tanggal,
 
     'Suhu': np.random.uniform(
-        24,
+        25,
         33,
         n_data
     ),
 
     'Hujan': np.random.uniform(
         0,
-        12,
+        10,
         n_data
     ),
 
@@ -106,19 +105,19 @@ df_simulasi = pd.DataFrame({
     'Ada_Promo': np.random.choice(
         [0, 1],
         size=n_data,
-        p=[0.65, 0.35]
+        p=[0.7, 0.3]
     ),
 
     'Jam_Operasional': np.random.choice(
         [1, 2, 3],
         size=n_data,
-        p=[0.25, 0.5, 0.25]
+        p=[0.3, 0.5, 0.2]
     )
 
 })
 
 # ======================================================
-# NAMA BULAN
+# BULAN
 # ======================================================
 nama_bulan = {
 
@@ -129,16 +128,18 @@ nama_bulan = {
 
 }
 
-df_simulasi['No_Bulan'] = df_simulasi[
-    'Tanggal'
-].dt.month
+df_simulasi['No_Bulan'] = (
+    df_simulasi['Tanggal']
+    .dt.month
+)
 
-df_simulasi['Bulan'] = df_simulasi[
-    'No_Bulan'
-].map(nama_bulan)
+df_simulasi['Bulan'] = (
+    df_simulasi['No_Bulan']
+    .map(nama_bulan)
+)
 
 # ======================================================
-# TARGET RAMAI / SEPI
+# TARGET RAMAI
 # ======================================================
 df_simulasi['Target_Ramai'] = (
 
@@ -155,11 +156,15 @@ df_simulasi['Target_Ramai'] = (
     |
 
     (
-        (df_simulasi['Hujan'] < 2)
+        (
+            df_simulasi['Hujan'] < 2
+        )
 
         &
 
-        (df_simulasi['Jam_Operasional'] == 2)
+        (
+            df_simulasi['Jam_Operasional'] == 2
+        )
     )
 
 ).astype(int)
@@ -169,12 +174,32 @@ df_simulasi['Target_Ramai'] = (
 # ======================================================
 jumlah_pengunjung = []
 
-for ramai in df_simulasi['Target_Ramai']:
+for i in range(n_data):
+
+    ramai = df_simulasi.loc[
+        i,
+        'Target_Ramai'
+    ]
+
+    promo = df_simulasi.loc[
+        i,
+        'Ada_Promo'
+    ]
+
+    libur = df_simulasi.loc[
+        i,
+        'Hari_Libur'
+    ]
+
+    hujan = df_simulasi.loc[
+        i,
+        'Hujan'
+    ]
 
     if ramai == 1:
 
         pengunjung = np.random.randint(
-            70,
+            80,
             140
         )
 
@@ -185,6 +210,35 @@ for ramai in df_simulasi['Target_Ramai']:
             70
         )
 
+    # Promo menambah pengunjung
+    if promo == 1:
+
+        pengunjung += np.random.randint(
+            10,
+            25
+        )
+
+    # Hari libur tambah pengunjung
+    if libur == 1:
+
+        pengunjung += np.random.randint(
+            15,
+            30
+        )
+
+    # Hujan deras kurangi pengunjung
+    if hujan > 7:
+
+        pengunjung -= np.random.randint(
+            10,
+            25
+        )
+
+    pengunjung = max(
+        pengunjung,
+        15
+    )
+
     jumlah_pengunjung.append(
         pengunjung
     )
@@ -194,7 +248,7 @@ df_simulasi[
 ] = jumlah_pengunjung
 
 # ======================================================
-# PENDAPATAN HARIAN
+# PENDAPATAN REALISTIS INDONESIA
 # ======================================================
 pendapatan = []
 
@@ -202,18 +256,34 @@ for pengunjung in df_simulasi[
     'Jumlah_Pengunjung'
 ]:
 
+    # Rata-rata orang belanja
+    # 28rb - 45rb
     rata_belanja = np.random.randint(
-        25000,
-        40000
+        28000,
+        45000
     )
 
-    total = pengunjung * rata_belanja
+    total = (
+        pengunjung *
+        rata_belanja
+    )
 
     pendapatan.append(total)
 
 df_simulasi[
     'Pendapatan_Harian'
 ] = pendapatan
+
+# ======================================================
+# FORMAT JUTA
+# ======================================================
+df_simulasi[
+    'Pendapatan_Juta'
+] = (
+    df_simulasi[
+        'Pendapatan_Harian'
+    ] / 1000000
+).round(2)
 
 # ======================================================
 # FEATURE & TARGET
@@ -240,20 +310,24 @@ y = df_simulasi[
 # SPLIT DATA
 # ======================================================
 X_train, X_test, y_train, y_test = train_test_split(
+
     X,
     y,
+
     test_size=0.2,
+
     random_state=42
+
 )
 
 # ======================================================
-# MODEL RANDOM FOREST
+# RANDOM FOREST
 # ======================================================
 model = RandomForestClassifier(
 
-    n_estimators=150,
+    n_estimators=200,
 
-    max_depth=8,
+    max_depth=10,
 
     random_state=42
 
@@ -265,7 +339,7 @@ model.fit(
 )
 
 # ======================================================
-# PREDIKSI
+# PREDIKSI TEST
 # ======================================================
 y_pred = model.predict(
     X_test
@@ -283,7 +357,7 @@ st.subheader("🎯 Akurasi Artificial Intelligence")
 
 st.success(
     f"""
-    Tingkat Akurasi Prediksi AI:
+    Tingkat Akurasi Model:
     {accuracy * 100:.2f}%
     """
 )
@@ -298,7 +372,7 @@ st.subheader("📍 Simulasi Kondisi Café")
 col1, col2, col3 = st.columns(3)
 
 # ======================================================
-# INPUT 1
+# KOLOM 1
 # ======================================================
 with col1:
 
@@ -311,56 +385,78 @@ with col1:
     )
 
     input_suhu = st.number_input(
+
         "Input Suhu",
+
         min_value=20.0,
+
         max_value=40.0,
+
         value=float(live_temp)
+
     )
 
     input_hujan = st.number_input(
+
         "Input Curah Hujan",
+
         min_value=0.0,
-        max_value=30.0,
+
+        max_value=20.0,
+
         value=float(live_rain)
+
     )
 
 # ======================================================
-# INPUT 2
+# KOLOM 2
 # ======================================================
 with col2:
 
     input_libur = st.selectbox(
+
         "Status Hari",
+
         [0, 1],
+
         format_func=lambda x:
         "Hari Kerja"
         if x == 0
         else "Hari Libur"
+
     )
 
     input_promo = st.selectbox(
+
         "Program Promo",
+
         [0, 1],
+
         format_func=lambda x:
         "Tidak Ada Promo"
         if x == 0
         else "Ada Promo"
+
     )
 
 # ======================================================
-# INPUT 3
+# KOLOM 3
 # ======================================================
 with col3:
 
     input_jam = st.selectbox(
+
         "Jam Operasional",
+
         [1, 2, 3],
+
         format_func=lambda x:
         "Pagi"
         if x == 1
         else "Sore"
         if x == 2
         else "Malam"
+
     )
 
 # ======================================================
@@ -374,7 +470,7 @@ analisis = st.button(
 )
 
 # ======================================================
-# HASIL AI
+# HASIL PREDIKSI AI
 # ======================================================
 if analisis:
 
@@ -400,7 +496,7 @@ if analisis:
 
     st.markdown("---")
 
-    st.subheader("🤖 Hasil Analisis Artificial Intelligence")
+    st.subheader("🤖 Hasil Analisis AI")
 
     # ==================================================
     # RAMAI
@@ -408,19 +504,19 @@ if analisis:
     if prediction == 1:
 
         estimasi_pengunjung = np.random.randint(
-            80,
-            140
+            90,
+            160
         )
 
         rata_belanja = np.random.randint(
-            28000,
-            40000
+            30000,
+            45000
         )
 
         estimasi_pendapatan = (
             estimasi_pengunjung *
             rata_belanja
-        )
+        ) / 1000000
 
         st.error(
             f"""
@@ -433,21 +529,9 @@ if analisis:
             {estimasi_pengunjung} Orang
             
             💰 Estimasi Pendapatan:
-            Rp {estimasi_pendapatan:,.0f}
+            Rp {estimasi_pendapatan:.2f} Juta
             """
         )
-
-        st.success("""
-        ✅ Rekomendasi AI
-        
-        • Tambah stok bahan baku
-        
-        • Tambah pegawai
-        
-        • Siapkan meja tambahan
-        
-        • Aktifkan promosi digital
-        """)
 
     # ==================================================
     # SEPI
@@ -461,13 +545,13 @@ if analisis:
 
         rata_belanja = np.random.randint(
             25000,
-            35000
+            40000
         )
 
         estimasi_pendapatan = (
             estimasi_pengunjung *
             rata_belanja
-        )
+        ) / 1000000
 
         st.success(
             f"""
@@ -480,45 +564,12 @@ if analisis:
             {estimasi_pengunjung} Orang
             
             💰 Estimasi Pendapatan:
-            Rp {estimasi_pendapatan:,.0f}
+            Rp {estimasi_pendapatan:.2f} Juta
             """
         )
 
-        st.info("""
-        📌 Rekomendasi AI
-        
-        • Fokus promosi
-        
-        • Hemat operasional
-        
-        • Tingkatkan pelayanan
-        
-        • Buat event kecil café
-        """)
-
-    # ==================================================
-    # PROGRESS BAR
-    # ==================================================
-    st.markdown("### 📊 Persentase Prediksi AI")
-
-    st.write(
-        f"🔥 Ramai : {persen_ramai:.2f}%"
-    )
-
-    st.progress(
-        int(persen_ramai)
-    )
-
-    st.write(
-        f"😌 Sepi : {persen_sepi:.2f}%"
-    )
-
-    st.progress(
-        int(persen_sepi)
-    )
-
 # ======================================================
-# DASHBOARD ANALITIK
+# DASHBOARD
 # ======================================================
 st.markdown("---")
 
@@ -534,11 +585,13 @@ with g1:
     importance_df = pd.DataFrame({
 
         'Faktor': [
+
             'Suhu',
             'Curah Hujan',
             'Hari Libur',
             'Promo',
             'Jam Operasional'
+
         ],
 
         'Pengaruh':
@@ -619,7 +672,7 @@ laporan_bulanan = df_simulasi.groupby(
 
     'Jumlah_Pengunjung': 'sum',
 
-    'Pendapatan_Harian': 'sum',
+    'Pendapatan_Juta': 'sum',
 
     'Target_Ramai': 'sum',
 
@@ -634,7 +687,7 @@ laporan_bulanan = df_simulasi.groupby(
 })
 
 # ======================================================
-# URUTKAN BULAN
+# SORT BULAN
 # ======================================================
 laporan_bulanan = laporan_bulanan.sort_values(
     by='No_Bulan'
@@ -652,12 +705,12 @@ laporan_bulanan[
 ).astype(int)
 
 laporan_bulanan[
-    'Rata2_Pendapatan_Harian'
+    'Rata2_Pendapatan_Juta'
 ] = (
     laporan_bulanan[
-        'Pendapatan_Harian'
+        'Pendapatan_Juta'
     ] / 30
-).astype(int)
+).round(2)
 
 laporan_bulanan[
     'Persentase_Ramai'
@@ -680,7 +733,7 @@ laporan_bulanan.columns = [
 
     'Total_Pengunjung',
 
-    'Total_Pendapatan',
+    'Total_Pendapatan_Juta',
 
     'Total_Hari_Ramai',
 
@@ -694,7 +747,7 @@ laporan_bulanan.columns = [
 
     'Rata2_Pengunjung_Harian',
 
-    'Rata2_Pendapatan_Harian',
+    'Rata2_Pendapatan_Juta',
 
     'Persentase_Ramai'
 
@@ -715,8 +768,14 @@ laporan_bulanan[
     'Rata_Rata_Hujan'
 ].round(1)
 
+laporan_bulanan[
+    'Total_Pendapatan_Juta'
+] = laporan_bulanan[
+    'Total_Pendapatan_Juta'
+].round(2)
+
 # ======================================================
-# TABS LAPORAN
+# TABS
 # ======================================================
 st.markdown("---")
 
@@ -747,9 +806,9 @@ with tab1:
 
             'Rata2_Pengunjung_Harian',
 
-            'Total_Pendapatan',
+            'Total_Pendapatan_Juta',
 
-            'Rata2_Pendapatan_Harian',
+            'Rata2_Pendapatan_Juta',
 
             'Total_Hari_Ramai',
 
@@ -780,13 +839,13 @@ with tab2:
 
         x='Bulan',
 
-        y='Total_Pendapatan',
+        y='Total_Pendapatan_Juta',
 
-        color='Total_Pendapatan',
+        color='Total_Pendapatan_Juta',
 
         text_auto=True,
 
-        title='💰 Pendapatan Café Januari - April'
+        title='💰 Pendapatan Café (Juta Rupiah)'
 
     )
 
@@ -834,7 +893,7 @@ with tab3:
 
             'Jumlah_Pengunjung',
 
-            'Pendapatan_Harian',
+            'Pendapatan_Juta',
 
             'Target_Ramai'
 
