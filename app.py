@@ -318,7 +318,7 @@ df_simulasi[
 # FORMAT JUTA
 # ======================================================
 df_simulasi[
-    'Pendapatan_Juta'
+    'Pendapatan'
 ] = (
     df_simulasi[
         'Pendapatan_Harian'
