@@ -25,7 +25,7 @@ st.set_page_config(
 st.title("☕ Cafe Analytics AI Indonesia")
 
 st.write("""
-Sistem Analisis & Prediksi Kepadatan Pengunjung Café
+Sistem Analisis & Prediksi Kepadatan Pengunjung Café Pinggir Jalan
 Menggunakan Artificial Intelligence Random Forest
 """)
 
@@ -189,7 +189,7 @@ for i in range(n_data):
     pengunjung = 20
 
     if ramai == 1:
-        pengunjung += 20
+        pengunjung += 25
 
     if promo == 1:
         pengunjung += 10
@@ -198,10 +198,10 @@ for i in range(n_data):
         pengunjung += 15
 
     if jam == 2:
-        pengunjung += 10
+        pengunjung += 15
 
     if hujan > 7:
-        pengunjung -= 10
+        pengunjung -= 15
 
     pengunjung += np.random.randint(-5, 5)
 
@@ -212,7 +212,7 @@ for i in range(n_data):
 df_simulasi['Jumlah_Pengunjung'] = jumlah_pengunjung
 
 # ======================================================
-# PENDAPATAN REALISTIS CAFE PINGGIR JALAN
+# PENDAPATAN CAFE PINGGIR JALAN
 # ======================================================
 pendapatan = []
 
@@ -238,26 +238,31 @@ for i in range(n_data):
         'Jam_Operasional'
     ]
 
+    # ==========================================
+    # RATA-RATA BELANJA
+    # ==========================================
     rata_belanja = 12000
 
     if libur == 1:
-        rata_belanja += 3000
-
-    if jam == 2:
         rata_belanja += 2000
 
+    if jam == 2:
+        rata_belanja += 1500
+
     if promo == 1:
-        rata_belanja -= 1500
+        rata_belanja -= 1000
 
     rata_belanja += np.random.randint(
         -1000,
         1000
     )
 
+    # ==========================================
+    # TOTAL PENDAPATAN
+    # ==========================================
     total = pengunjung * rata_belanja
 
-    # Maksimal harian cafe pinggir jalan
-    total = min(total, 700000)
+    total = min(total, 750000)
 
     pendapatan.append(total)
 
@@ -448,41 +453,6 @@ if analisis:
 
     persen_ramai = probability[1] * 100
 
-    estimasi_pengunjung = 20
-
-    if input_promo == 1:
-        estimasi_pengunjung += 10
-
-    if input_libur == 1:
-        estimasi_pengunjung += 15
-
-    if input_jam == 2:
-        estimasi_pengunjung += 10
-
-    if input_hujan > 7:
-        estimasi_pengunjung -= 10
-
-    estimasi_pengunjung = max(
-        estimasi_pengunjung,
-        5
-    )
-
-    rata_belanja = 12000
-
-    if input_libur == 1:
-        rata_belanja += 3000
-
-    if input_jam == 2:
-        rata_belanja += 2000
-
-    if input_promo == 1:
-        rata_belanja -= 1500
-
-    estimasi_pendapatan = (
-        estimasi_pengunjung *
-        rata_belanja
-    ) / 1000000
-
     st.markdown("---")
 
     st.subheader("🤖 Hasil Analisis AI")
@@ -495,12 +465,6 @@ if analisis:
 
             📌 Keyakinan AI:
             {persen_ramai:.2f}%
-
-            👥 Estimasi Pengunjung:
-            {estimasi_pengunjung} Orang
-
-            💰 Estimasi Pendapatan:
-            Rp {estimasi_pendapatan:.2f} Juta
             """
         )
 
@@ -512,105 +476,11 @@ if analisis:
 
             📌 Keyakinan AI:
             {persen_sepi:.2f}%
-
-            👥 Estimasi Pengunjung:
-            {estimasi_pengunjung} Orang
-
-            💰 Estimasi Pendapatan:
-            Rp {estimasi_pendapatan:.2f} Juta
             """
         )
 
 # ======================================================
-# DASHBOARD ANALITIK
-# ======================================================
-st.markdown("---")
-
-st.subheader("📊 Dashboard Analitik Café")
-
-g1, g2 = st.columns(2)
-
-with g1:
-
-    importance_df = pd.DataFrame({
-
-        'Faktor': [
-
-            'Suhu',
-            'Curah Hujan',
-            'Hari Libur',
-            'Promo',
-            'Jam Operasional'
-
-        ],
-
-        'Pengaruh':
-        model.feature_importances_
-
-    })
-
-    importance_df = importance_df.sort_values(
-        by='Pengaruh',
-        ascending=False
-    )
-
-    fig_bar = px.bar(
-
-        importance_df,
-
-        x='Faktor',
-
-        y='Pengaruh',
-
-        color='Pengaruh',
-
-        title='🔥 Faktor Paling Berpengaruh'
-
-    )
-
-    st.plotly_chart(
-        fig_bar,
-        use_container_width=True
-    )
-
-with g2:
-
-    cm = confusion_matrix(
-        y_test,
-        y_pred
-    )
-
-    fig_cm = ff.create_annotated_heatmap(
-
-        z=cm,
-
-        x=[
-            'Prediksi Sepi',
-            'Prediksi Ramai'
-        ],
-
-        y=[
-            'Asli Sepi',
-            'Asli Ramai'
-        ],
-
-        annotation_text=cm.astype(str),
-
-        colorscale='Viridis'
-
-    )
-
-    fig_cm.update_layout(
-        title='🧠 Confusion Matrix'
-    )
-
-    st.plotly_chart(
-        fig_cm,
-        use_container_width=True
-    )
-
-# ======================================================
-# LAPORAN STATISTIK BULANAN
+# LAPORAN BULANAN
 # ======================================================
 st.markdown("---")
 
@@ -659,7 +529,7 @@ st.dataframe(
 )
 
 # ======================================================
-# GRAFIK PENDAPATAN BULANAN
+# GRAFIK PENDAPATAN
 # ======================================================
 fig_income = px.bar(
 
@@ -671,7 +541,7 @@ fig_income = px.bar(
 
     text='Total Pendapatan',
 
-    title='💰 Pendapatan Bulanan Café (Juta Rupiah)'
+    title='💰 Pendapatan Bulanan Café Pinggir Jalan'
 
 )
 
@@ -681,11 +551,11 @@ st.plotly_chart(
 )
 
 # ======================================================
-# DETAIL DATA HARIAN
+# DETAIL HARIAN
 # ======================================================
 st.markdown("---")
 
-st.subheader("📅 Detail Data Harian Café")
+st.subheader("📅 Detail Data Harian")
 
 bulan_pilih = st.selectbox(
 
