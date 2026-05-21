@@ -186,34 +186,33 @@ for i in range(n_data):
 
     jam = df_simulasi.loc[i, 'Jam_Operasional']
 
-    pengunjung = 35
+    pengunjung = 20
 
     if ramai == 1:
-        pengunjung += 35
-
-    if promo == 1:
-        pengunjung += 15
-
-    if libur == 1:
-        pengunjung += 25
-
-    if jam == 2:
         pengunjung += 20
 
+    if promo == 1:
+        pengunjung += 10
+
+    if libur == 1:
+        pengunjung += 15
+
+    if jam == 2:
+        pengunjung += 10
+
     if hujan > 7:
-        pengunjung -= 20
+        pengunjung -= 10
 
-    pengunjung += np.random.randint(-8, 8)
+    pengunjung += np.random.randint(-5, 5)
 
-    pengunjung = max(pengunjung, 10)
+    pengunjung = max(pengunjung, 5)
 
     jumlah_pengunjung.append(pengunjung)
 
 df_simulasi['Jumlah_Pengunjung'] = jumlah_pengunjung
 
 # ======================================================
-# PENDAPATAN REALISTIS INDONESIA
-# MAX BULANAN ±35 JUTA
+# PENDAPATAN REALISTIS CAFE PINGGIR JALAN
 # ======================================================
 pendapatan = []
 
@@ -239,25 +238,26 @@ for i in range(n_data):
         'Jam_Operasional'
     ]
 
-    rata_belanja = 22000
+    rata_belanja = 12000
 
     if libur == 1:
-        rata_belanja += 4000
-
-    if jam == 2:
         rata_belanja += 3000
 
+    if jam == 2:
+        rata_belanja += 2000
+
     if promo == 1:
-        rata_belanja -= 2000
+        rata_belanja -= 1500
 
     rata_belanja += np.random.randint(
-        -2000,
-        2000
+        -1000,
+        1000
     )
 
     total = pengunjung * rata_belanja
 
-    total = min(total, 1400000)
+    # Maksimal harian cafe pinggir jalan
+    total = min(total, 700000)
 
     pendapatan.append(total)
 
@@ -448,35 +448,35 @@ if analisis:
 
     persen_ramai = probability[1] * 100
 
-    estimasi_pengunjung = 35
+    estimasi_pengunjung = 20
 
     if input_promo == 1:
-        estimasi_pengunjung += 20
+        estimasi_pengunjung += 10
 
     if input_libur == 1:
-        estimasi_pengunjung += 30
+        estimasi_pengunjung += 15
 
     if input_jam == 2:
-        estimasi_pengunjung += 20
+        estimasi_pengunjung += 10
 
     if input_hujan > 7:
-        estimasi_pengunjung -= 15
+        estimasi_pengunjung -= 10
 
     estimasi_pengunjung = max(
         estimasi_pengunjung,
-        10
+        5
     )
 
-    rata_belanja = 22000
+    rata_belanja = 12000
 
     if input_libur == 1:
-        rata_belanja += 4000
-
-    if input_jam == 2:
         rata_belanja += 3000
 
+    if input_jam == 2:
+        rata_belanja += 2000
+
     if input_promo == 1:
-        rata_belanja -= 2000
+        rata_belanja -= 1500
 
     estimasi_pendapatan = (
         estimasi_pengunjung *
