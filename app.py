@@ -13,7 +13,7 @@ from sklearn.metrics import (
 )
 
 # ======================================================
-# STREAMLIT
+# SETUP STREAMLIT
 # ======================================================
 st.set_page_config(
     page_title="Cafe Analytics AI Pro",
@@ -33,7 +33,7 @@ st.sidebar.write("NIM : Isi NIM")
 st.sidebar.write("Kampus : UNTAD")
 
 # ======================================================
-# API CUACA
+# API CUACA LIVE
 # ======================================================
 url = (
     "https://api.open-meteo.com/v1/forecast"
@@ -185,23 +185,23 @@ model = RandomForestClassifier(
 model.fit(X_train, y_train)
 
 # ======================================================
-# HASIL AKURASI
+# AKURASI MODEL
 # ======================================================
 y_pred = model.predict(X_test)
 
 akurasi = accuracy_score(y_test, y_pred)
 
 st.subheader("🎯 Akurasi AI")
-st.success(f"Akurasi Model: {akurasi * 100:.2f}%")
+st.success(f"Akurasi Model : {akurasi * 100:.2f}%")
 
 # ======================================================
 # INPUT USER
 # ======================================================
 st.subheader("📍 Simulasi Kondisi Café")
 
-col1, col2, col3 = st.columns(3)
+c1, c2, c3 = st.columns(3)
 
-with col1:
+with c1:
 
     st.info(f"""
     🌡️ Suhu : {live_temp}°C
@@ -214,14 +214,14 @@ with col1:
     )
 
     hujan = st.number_input(
-        "Input Hujan",
+        "Input Curah Hujan",
         value=float(live_rain)
     )
 
-with col2:
+with c2:
 
     libur = st.selectbox(
-        "Hari",
+        "Status Hari",
         [0, 1],
         format_func=lambda x:
         "Hari Kerja" if x == 0 else "Hari Libur"
@@ -231,7 +231,7 @@ with col2:
         "Promo",
         [0, 1],
         format_func=lambda x:
-        "Tidak Ada" if x == 0 else "Ada Promo"
+        "Tidak Ada Promo" if x == 0 else "Ada Promo"
     )
 
     jam = st.selectbox(
@@ -243,7 +243,7 @@ with col2:
         else "Malam"
     )
 
-with col3:
+with c3:
 
     rating = st.slider(
         "Rating Café",
@@ -283,7 +283,7 @@ data_baru = pd.DataFrame([[
 prediksi = model.predict(data_baru)[0]
 
 # ======================================================
-# HASIL
+# HASIL PREDIKSI
 # ======================================================
 st.subheader("🤖 Hasil Prediksi")
 
@@ -294,7 +294,7 @@ if prediksi == 1:
 
     ✅ Tambah stok
     ✅ Tambah pegawai
-    ✅ Siapkan meja
+    ✅ Siapkan meja tambahan
     """)
 
 else:
@@ -310,14 +310,14 @@ else:
 # VISUALISASI
 # ======================================================
 st.markdown("---")
-st.subheader("📊 Dashboard Analitik")
+st.subheader("📊 Dashboard Analitik Café")
 
-c1, c2 = st.columns(2)
+v1, v2 = st.columns(2)
 
 # ======================================================
 # FEATURE IMPORTANCE
 # ======================================================
-with c1:
+with v1:
 
     importance = pd.DataFrame({
         'Faktor': fitur,
@@ -334,7 +334,7 @@ with c1:
         x='Faktor',
         y='Pengaruh',
         color='Pengaruh',
-        title='🔥 Faktor Pengaruh'
+        title='🔥 Faktor Paling Berpengaruh'
     )
 
     st.plotly_chart(fig1, use_container_width=True)
@@ -342,7 +342,7 @@ with c1:
 # ======================================================
 # CONFUSION MATRIX
 # ======================================================
-with c2:
+with v2:
 
     cm = confusion_matrix(y_test, y_pred)
 
@@ -361,26 +361,73 @@ with c2:
     st.plotly_chart(fig2, use_container_width=True)
 
 # ======================================================
-# GRAFIK PENDAPATAN
+# DATA HARIAN
 # ======================================================
-st.subheader("💰 Pendapatan Café")
+df_harian = pd.DataFrame({
 
-fig3 = px.line(
-    df,
-    x='Nama_Cafe',
-    y='Pendapatan_Harian',
-    markers=True,
-    title='Pendapatan Harian'
+    'Tanggal': pd.date_range(
+        start='2025-01-01',
+        periods=30,
+        freq='D'
+    ),
+
+    'Pendapatan_Harian': [
+        1200000, 1500000, 1700000, 2000000, 2100000,
+        2500000, 3000000, 2800000, 2600000, 2200000,
+        1900000, 2300000, 2400000, 2700000, 3200000,
+        3500000, 3100000, 2900000, 2600000, 2400000,
+        2100000, 1800000, 1700000, 2000000, 2300000,
+        2500000, 2800000, 3000000, 3300000, 3600000
+    ]
+})
+
+# ======================================================
+# LAPORAN BULANAN
+# ======================================================
+df_harian['Bulan'] = df_harian['Tanggal'].dt.strftime('%B')
+
+laporan_bulanan = df_harian.groupby(
+    'Bulan',
+    as_index=False
+)['Pendapatan_Harian'].sum()
+
+laporan_bulanan.columns = [
+    'Bulan',
+    'Total_Pendapatan'
+]
+
+# ======================================================
+# GRAFIK BULANAN
+# ======================================================
+st.subheader("📅 Laporan Statistik Bulanan")
+
+fig3 = px.bar(
+    laporan_bulanan,
+    x='Bulan',
+    y='Total_Pendapatan',
+    text_auto=True,
+    title='💰 Total Pendapatan Per Bulan'
 )
 
 st.plotly_chart(fig3, use_container_width=True)
 
 # ======================================================
-# DATASET
+# TABEL BULANAN
+# ======================================================
+st.dataframe(
+    laporan_bulanan,
+    use_container_width=True
+)
+
+# ======================================================
+# DATA HISTORIS
 # ======================================================
 st.subheader("📋 Data Historis Café")
 
-st.dataframe(df, use_container_width=True)
+st.dataframe(
+    df,
+    use_container_width=True
+)
 
 # ======================================================
 # CLASSIFICATION REPORT
