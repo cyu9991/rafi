@@ -155,4 +155,4 @@ with tab2:
 st.markdown("<br><br>", unsafe_allow_html=True)
 col_left, col_right = st.columns([1, 4])
 with col_left:
-    st.markdown("<p style='text-align: left; color: #777; font-size: 10px; margin: 0;'>made with ❤️ by temennya fuad</p>", unsafe_allow_html=True)
+    st.markdown("<p style='text-align: left; color: #777; font-size: 10px; margin: 0;'>made with ❤️ by RAFI AHMAD</p>", unsafe_allow_html=True)
