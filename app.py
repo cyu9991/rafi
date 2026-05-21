@@ -59,16 +59,16 @@ try:
 
     live_temp = int(current_weather['temperature_2m'])
 
-    live_rain = current_weather['precipitation']
+    live_rain = int(current_weather['precipitation'])
 
 except:
 
     live_temp = 28
 
-    live_rain = 0.0
+    live_rain = 0
 
 # ======================================================
-# GENERATE DATASET HARIAN
+# GENERATE DATASET
 # ======================================================
 np.random.seed(42)
 
@@ -90,11 +90,11 @@ df_simulasi = pd.DataFrame({
         n_data
     ),
 
-    'Hujan': np.random.uniform(
+    'Hujan': np.random.randint(
         0,
-        10,
+        11,
         n_data
-    ).round(1),
+    ),
 
     'Hari_Libur': np.random.choice(
         [0, 1],
@@ -117,7 +117,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# NAMA BULAN
+# BULAN
 # ======================================================
 nama_bulan = {
 
@@ -139,34 +139,38 @@ df_simulasi['Bulan'] = (
 )
 
 # ======================================================
-# TARGET RAMAI
+# TARGET RAMAI (LEBIH REALISTIS)
 # ======================================================
+score = []
+
+for i in range(n_data):
+
+    nilai = 0
+
+    if df_simulasi.loc[i, 'Ada_Promo'] == 1:
+        nilai += 30
+
+    if df_simulasi.loc[i, 'Hari_Libur'] == 1:
+        nilai += 25
+
+    if df_simulasi.loc[i, 'Jam_Operasional'] == 2:
+        nilai += 20
+
+    if df_simulasi.loc[i, 'Hujan'] < 3:
+        nilai += 15
+
+    if 26 <= df_simulasi.loc[i, 'Suhu'] <= 30:
+        nilai += 10
+
+    # Noise random
+    nilai += np.random.randint(-40, 40)
+
+    score.append(nilai)
+
+df_simulasi['Skor_Ramai'] = score
+
 df_simulasi['Target_Ramai'] = (
-
-    (
-        df_simulasi['Ada_Promo'] == 1
-    )
-
-    |
-
-    (
-        df_simulasi['Hari_Libur'] == 1
-    )
-
-    |
-
-    (
-        (
-            df_simulasi['Hujan'] < 2
-        )
-
-        &
-
-        (
-            df_simulasi['Jam_Operasional'] == 2
-        )
-    )
-
+    df_simulasi['Skor_Ramai'] >= 40
 ).astype(int)
 
 # ======================================================
@@ -201,9 +205,9 @@ for i in range(n_data):
         pengunjung += 15
 
     if hujan > 7:
-        pengunjung -= 15
+        pengunjung -= 10
 
-    pengunjung += np.random.randint(-5, 5)
+    pengunjung += np.random.randint(-5, 8)
 
     pengunjung = max(pengunjung, 5)
 
@@ -228,35 +232,17 @@ for i in range(n_data):
         'Ada_Promo'
     ]
 
-    libur = df_simulasi.loc[
-        i,
-        'Hari_Libur'
-    ]
-
-    jam = df_simulasi.loc[
-        i,
-        'Jam_Operasional'
-    ]
-
-    rata_belanja = 12000
-
-    if libur == 1:
-        rata_belanja += 2000
-
-    if jam == 2:
-        rata_belanja += 1500
+    rata_belanja = 15000
 
     if promo == 1:
-        rata_belanja -= 1000
+        rata_belanja -= 2000
 
     rata_belanja += np.random.randint(
         -1000,
-        1000
+        2000
     )
 
     total = pengunjung * rata_belanja
-
-    total = min(total, 750000)
 
     pendapatan.append(total)
 
@@ -264,15 +250,13 @@ df_simulasi[
     'Pendapatan_Harian'
 ] = pendapatan
 
-df_simulasi[
-    'Pendapatan_Juta'
-] = (
-
-    df_simulasi[
-        'Pendapatan_Harian'
-    ] / 1000000
-
-).round(2)
+# Format Rupiah
+df_simulasi['Pendapatan_Rp'] = (
+    'Rp ' +
+    df_simulasi['Pendapatan_Harian']
+    .astype(int)
+    .apply(lambda x: f"{x:,}".replace(",", "."))
+)
 
 # ======================================================
 # FEATURE & TARGET
@@ -314,9 +298,9 @@ X_train, X_test, y_train, y_test = train_test_split(
 # ======================================================
 model = RandomForestClassifier(
 
-    n_estimators=200,
+    n_estimators=100,
 
-    max_depth=10,
+    max_depth=5,
 
     random_state=42
 
@@ -342,7 +326,10 @@ accuracy = accuracy_score(
 st.subheader("🎯 Akurasi AI")
 
 st.success(
-    f"Tingkat Akurasi Model: {accuracy * 100:.2f}%"
+    f"""
+    Tingkat Akurasi Model:
+    {accuracy * 100:.2f}%
+    """
 )
 
 # ======================================================
@@ -373,9 +360,9 @@ with col1:
 
     input_hujan = st.number_input(
         "Input Curah Hujan",
-        min_value=0.0,
-        max_value=20.0,
-        value=float(live_rain)
+        min_value=0,
+        max_value=20,
+        value=live_rain
     )
 
 with col2:
@@ -444,6 +431,37 @@ if analisis:
 
     persen_ramai = probability[1] * 100
 
+    estimasi_pengunjung = 20
+
+    if input_promo == 1:
+        estimasi_pengunjung += 10
+
+    if input_libur == 1:
+        estimasi_pengunjung += 15
+
+    if input_jam == 2:
+        estimasi_pengunjung += 15
+
+    if input_hujan > 7:
+        estimasi_pengunjung -= 10
+
+    estimasi_pengunjung = max(
+        estimasi_pengunjung,
+        5
+    )
+
+    rata_belanja = 15000
+
+    estimasi_pendapatan = (
+        estimasi_pengunjung *
+        rata_belanja
+    )
+
+    pendapatan_format = (
+        f"Rp {estimasi_pendapatan:,}"
+        .replace(",", ".")
+    )
+
     st.markdown("---")
 
     st.subheader("🤖 Hasil Analisis AI")
@@ -456,6 +474,12 @@ if analisis:
 
             📌 Keyakinan AI:
             {persen_ramai:.2f}%
+
+            👥 Estimasi Pengunjung:
+            {estimasi_pengunjung} Orang
+
+            💰 Estimasi Pendapatan:
+            {pendapatan_format}
             """
         )
 
@@ -467,6 +491,12 @@ if analisis:
 
             📌 Keyakinan AI:
             {persen_sepi:.2f}%
+
+            👥 Estimasi Pengunjung:
+            {estimasi_pengunjung} Orang
+
+            💰 Estimasi Pendapatan:
+            {pendapatan_format}
             """
         )
 
@@ -497,11 +527,6 @@ with g1:
         model.feature_importances_
 
     })
-
-    importance_df = importance_df.sort_values(
-        by='Pengaruh',
-        ascending=False
-    )
 
     fig_bar = px.bar(
 
@@ -589,20 +614,19 @@ laporan_bulanan.columns = [
 
 laporan_bulanan['Rata-rata Suhu'] = (
     laporan_bulanan['Rata-rata Suhu']
-    .round(0)
     .astype(int)
 )
 
 laporan_bulanan['Rata-rata Hujan'] = (
     laporan_bulanan['Rata-rata Hujan']
-    .round(1)
+    .astype(int)
 )
 
 laporan_bulanan['Total Pendapatan'] = (
     laporan_bulanan['Total Pendapatan']
     .apply(
         lambda x:
-        f"Rp {x:,.0f}"
+        f"Rp {x:,}".replace(",", ".")
     )
 )
 
@@ -614,52 +638,6 @@ st.dataframe(
 
     hide_index=True
 
-)
-
-# ======================================================
-# DATA GRAFIK
-# ======================================================
-grafik_pendapatan = df_simulasi.groupby(
-    'Bulan',
-    sort=False
-)['Pendapatan_Harian'].sum().reset_index()
-
-# ======================================================
-# GRAFIK PENDAPATAN
-# ======================================================
-fig_income = px.bar(
-
-    grafik_pendapatan,
-
-    x='Bulan',
-
-    y='Pendapatan_Harian',
-
-    text='Pendapatan_Harian',
-
-    title='💰 Pendapatan Bulanan Café Pinggir Jalan'
-
-)
-
-fig_income.update_traces(
-
-    texttemplate='Rp %{text:,.0f}',
-
-    textposition='outside'
-
-)
-
-fig_income.update_layout(
-
-    yaxis_title='Pendapatan',
-
-    xaxis_title='Bulan'
-
-)
-
-st.plotly_chart(
-    fig_income,
-    use_container_width=True
 )
 
 # ======================================================
@@ -687,7 +665,7 @@ detail_harian = df_simulasi[
     'Ada_Promo',
     'Jam_Operasional',
     'Jumlah_Pengunjung',
-    'Pendapatan_Harian'
+    'Pendapatan_Rp'
 ]]
 
 detail_harian = detail_harian.rename(columns={
@@ -698,14 +676,9 @@ detail_harian = detail_harian.rename(columns={
     'Ada_Promo': 'Promo',
     'Jam_Operasional': 'Shift',
     'Jumlah_Pengunjung': 'Pengunjung',
-    'Pendapatan_Harian': 'Pendapatan'
+    'Pendapatan_Rp': 'Pendapatan'
 
 })
-
-detail_harian['Pendapatan'] = (
-    detail_harian['Pendapatan']
-    .apply(lambda x: f"Rp {x:,.0f}")
-)
 
 st.dataframe(
 
