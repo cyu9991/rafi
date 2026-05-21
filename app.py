@@ -29,7 +29,7 @@ st.write(
 )
 
 # ======================================================
-# SIDEBAR
+# SIDEBAR IDENTITAS
 # ======================================================
 st.sidebar.header("📝 Identitas Mahasiswa")
 
@@ -37,7 +37,7 @@ st.sidebar.write("Nama : Isi Nama")
 st.sidebar.write("NIM : Isi NIM")
 
 # ======================================================
-# API CUACA LIVE
+# API CUACA LIVE PALU
 # ======================================================
 url = (
     "https://api.open-meteo.com/v1/forecast"
@@ -182,13 +182,35 @@ df_simulasi['Bulan'] = df_simulasi[
 ].map(nama_bulan)
 
 # ======================================================
-# PENDAPATAN HARIAN
+# PENDAPATAN HARIAN REALISTIS
 # ======================================================
-df_simulasi['Pendapatan_Harian'] = np.random.randint(
-    1000000,
-    5000000,
-    n_data
-)
+pendapatan = []
+
+for ramai in df_simulasi['Target_Ramai']:
+
+    # ==================================================
+    # JIKA RAMAI
+    # ==================================================
+    if ramai == 1:
+
+        uang = np.random.randint(
+            1800000,
+            4000000
+        )
+
+    # ==================================================
+    # JIKA SEPI
+    # ==================================================
+    else:
+
+        uang = np.random.randint(
+            300000,
+            1500000
+        )
+
+    pendapatan.append(uang)
+
+df_simulasi['Pendapatan_Harian'] = pendapatan
 
 # ======================================================
 # FEATURE & TARGET
@@ -239,7 +261,7 @@ accuracy = accuracy_score(
 )
 
 # ======================================================
-# AKURASI
+# AKURASI MODEL
 # ======================================================
 st.subheader("🎯 Performa Akurasi Otak AI")
 
@@ -266,7 +288,7 @@ with col1:
         f"""
         🌡️ Suhu Live : {live_temp} °C
         
-        🌧️ Hujan Live : {live_rain} mm
+        🌧️ Curah Hujan : {live_rain} mm
         """
     )
 
@@ -295,7 +317,7 @@ with col2:
     )
 
     input_promo = st.selectbox(
-        "Promo Cafe",
+        "Program Promo",
         [0, 1],
         format_func=lambda x:
         "Tidak Ada Promo"
@@ -320,7 +342,7 @@ with col3:
     )
 
 # ======================================================
-# DATA BARU
+# DATA INPUT USER
 # ======================================================
 current_data = pd.DataFrame([[
     input_suhu,
@@ -337,14 +359,14 @@ prediction = model.predict(
     current_data
 )[0]
 
-st.subheader("🤖 Hasil Prediksi")
+st.subheader("🤖 Hasil Prediksi Pengunjung")
 
 if prediction == 1:
 
     st.error("""
     🔥 AI Memprediksi Kafe Akan Ramai
 
-    ✅ Tambah stok
+    ✅ Tambah stok bahan
     ✅ Tambah pegawai
     ✅ Siapkan meja tambahan
     """)
@@ -495,7 +517,7 @@ laporan_bulanan.columns = [
 ]
 
 # ======================================================
-# TABS
+# TABS LAPORAN
 # ======================================================
 st.markdown("---")
 
@@ -517,8 +539,11 @@ tab1, tab2, tab3 = st.tabs([
 with tab1:
 
     st.dataframe(
-        laporan_bulanan,
+
+        laporan_bulanan.style.hide(axis="index"),
+
         use_container_width=True
+
     )
 
 # ======================================================
@@ -538,7 +563,7 @@ with tab2:
 
         text_auto=True,
 
-        title='💰 Total Pendapatan Per Bulan'
+        title='💰 Pendapatan Café Per Bulan'
 
     )
 
@@ -560,7 +585,6 @@ with tab3:
 
     )
 
-    # FILTER DATA
     data_harian = df_simulasi[
         df_simulasi['Bulan'] == pilih_bulan
     ]
@@ -569,7 +593,6 @@ with tab3:
         f"📅 Data Harian Bulan {pilih_bulan}"
     )
 
-    # TABEL DETAIL
     st.dataframe(
 
         data_harian[[
@@ -590,13 +613,15 @@ with tab3:
 
             'Target_Ramai'
 
-        ]],
+        ]].style.hide(axis="index"),
 
         use_container_width=True
 
     )
 
+    # ==================================================
     # GRAFIK HARIAN
+    # ==================================================
     fig_harian = px.line(
 
         data_harian,
@@ -617,7 +642,7 @@ with tab3:
     )
 
 # ======================================================
-# LAPORAN AI
+# LAPORAN KLASIFIKASI
 # ======================================================
 st.markdown("---")
 
