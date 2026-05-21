@@ -195,26 +195,26 @@ for i in range(n_data):
 
     jam = df_simulasi.loc[i, 'Jam_Operasional']
 
-    pengunjung = 40
+    pengunjung = 35
 
     if ramai == 1:
-        pengunjung += 40
+        pengunjung += 35
 
     if promo == 1:
-        pengunjung += 20
+        pengunjung += 15
 
     if libur == 1:
-        pengunjung += 30
-
-    if jam == 2:
         pengunjung += 25
 
+    if jam == 2:
+        pengunjung += 20
+
     if hujan > 7:
-        pengunjung -= 25
+        pengunjung -= 20
 
-    pengunjung += np.random.randint(-10, 10)
+    pengunjung += np.random.randint(-8, 8)
 
-    pengunjung = max(pengunjung, 15)
+    pengunjung = max(pengunjung, 10)
 
     jumlah_pengunjung.append(pengunjung)
 
@@ -222,6 +222,7 @@ df_simulasi['Jumlah_Pengunjung'] = jumlah_pengunjung
 
 # ======================================================
 # PENDAPATAN REALISTIS INDONESIA
+# MAX BULANAN ±35 JUTA
 # ======================================================
 pendapatan = []
 
@@ -242,20 +243,36 @@ for i in range(n_data):
         'Hari_Libur'
     ]
 
-    rata_belanja = 35000
+    jam = df_simulasi.loc[
+        i,
+        'Jam_Operasional'
+    ]
 
-    if promo == 1:
-        rata_belanja -= 3000
+    # ==================================================
+    # RATA BELANJA
+    # ==================================================
+    rata_belanja = 22000
 
     if libur == 1:
-        rata_belanja += 5000
+        rata_belanja += 4000
+
+    if jam == 2:
+        rata_belanja += 3000
+
+    if promo == 1:
+        rata_belanja -= 2000
 
     rata_belanja += np.random.randint(
-        -3000,
-        3000
+        -2000,
+        2000
     )
 
     total = pengunjung * rata_belanja
+
+    # ==================================================
+    # BATAS PENDAPATAN HARIAN
+    # ==================================================
+    total = min(total, 1400000)
 
     pendapatan.append(total)
 
@@ -446,38 +463,35 @@ if analisis:
 
     persen_ramai = probability[1] * 100
 
-    # ==================================================
-    # ESTIMASI PENGUNJUNG
-    # ==================================================
-    estimasi_pengunjung = 40
+    estimasi_pengunjung = 35
 
     if input_promo == 1:
-        estimasi_pengunjung += 30
+        estimasi_pengunjung += 20
 
     if input_libur == 1:
-        estimasi_pengunjung += 40
+        estimasi_pengunjung += 30
 
     if input_jam == 2:
-        estimasi_pengunjung += 25
+        estimasi_pengunjung += 20
 
     if input_hujan > 7:
-        estimasi_pengunjung -= 20
+        estimasi_pengunjung -= 15
 
     estimasi_pengunjung = max(
         estimasi_pengunjung,
-        15
+        10
     )
 
-    # ==================================================
-    # ESTIMASI PENDAPATAN
-    # ==================================================
-    rata_belanja = 35000
-
-    if input_promo == 1:
-        rata_belanja -= 3000
+    rata_belanja = 22000
 
     if input_libur == 1:
-        rata_belanja += 5000
+        rata_belanja += 4000
+
+    if input_jam == 2:
+        rata_belanja += 3000
+
+    if input_promo == 1:
+        rata_belanja -= 2000
 
     estimasi_pendapatan = (
         estimasi_pengunjung *
@@ -531,9 +545,6 @@ st.subheader("📊 Dashboard Analitik Café")
 
 g1, g2 = st.columns(2)
 
-# ======================================================
-# FEATURE IMPORTANCE
-# ======================================================
 with g1:
 
     importance_df = pd.DataFrame({
@@ -577,9 +588,6 @@ with g1:
         use_container_width=True
     )
 
-# ======================================================
-# CONFUSION MATRIX
-# ======================================================
 with g2:
 
     cm = confusion_matrix(
@@ -615,394 +623,3 @@ with g2:
         fig_cm,
         use_container_width=True
     )
-
-# ======================================================
-# LAPORAN BULANAN
-# ======================================================
-laporan_bulanan = df_simulasi.groupby(
-    ['No_Bulan', 'Bulan'],
-    as_index=False
-).agg({
-
-    'Jumlah_Pengunjung': 'sum',
-
-    'Pendapatan_Juta': 'sum',
-
-    'Target_Ramai': 'sum',
-
-    'Suhu': 'mean',
-
-    'Hujan': 'mean',
-
-    'Ada_Promo': 'sum',
-
-    'Hari_Libur': 'sum'
-
-})
-
-# ======================================================
-# TAMBAH JUMLAH HARI
-# ======================================================
-laporan_bulanan['Jumlah_Hari'] = (
-    laporan_bulanan['Bulan']
-    .map(hari_per_bulan)
-)
-
-# ======================================================
-# RATA-RATA HARIAN
-# ======================================================
-laporan_bulanan[
-    'Rata2_Pengunjung_Harian'
-] = (
-
-    laporan_bulanan[
-        'Jumlah_Pengunjung'
-    ]
-
-    /
-
-    laporan_bulanan[
-        'Jumlah_Hari'
-    ]
-
-).round(0).astype(int)
-
-laporan_bulanan[
-    'Rata2_Pendapatan_Juta'
-] = (
-
-    laporan_bulanan[
-        'Pendapatan_Juta'
-    ]
-
-    /
-
-    laporan_bulanan[
-        'Jumlah_Hari'
-    ]
-
-).round(2)
-
-# ======================================================
-# PERSENTASE RAMAI
-# ======================================================
-laporan_bulanan[
-    'Persentase_Ramai'
-] = (
-
-    (
-        laporan_bulanan[
-            'Target_Ramai'
-        ]
-
-        /
-
-        laporan_bulanan[
-            'Jumlah_Hari'
-        ]
-
-    ) * 100
-
-).round(1)
-
-# ======================================================
-# FORMAT DATA
-# ======================================================
-laporan_bulanan.columns = [
-
-    'No_Bulan',
-
-    'Bulan',
-
-    'Total_Pengunjung',
-
-    'Total_Pendapatan_Juta',
-
-    'Total_Hari_Ramai',
-
-    'Rata_Rata_Suhu',
-
-    'Rata_Rata_Hujan',
-
-    'Total_Hari_Promo',
-
-    'Total_Hari_Libur',
-
-    'Jumlah_Hari',
-
-    'Rata2_Pengunjung_Harian',
-
-    'Rata2_Pendapatan_Juta',
-
-    'Persentase_Ramai'
-
-]
-
-laporan_bulanan[
-    'Rata_Rata_Suhu'
-] = laporan_bulanan[
-    'Rata_Rata_Suhu'
-].round(1)
-
-laporan_bulanan[
-    'Rata_Rata_Hujan'
-] = laporan_bulanan[
-    'Rata_Rata_Hujan'
-].round(1)
-
-laporan_bulanan[
-    'Total_Pendapatan_Juta'
-] = laporan_bulanan[
-    'Total_Pendapatan_Juta'
-].round(2)
-
-laporan_bulanan = laporan_bulanan.sort_values(
-    by='No_Bulan'
-)
-
-# ======================================================
-# TAB LAPORAN
-# ======================================================
-st.markdown("---")
-
-st.subheader("📋 Statistik Café Januari - April")
-
-tab1, tab2, tab3 = st.tabs([
-
-    "📅 Statistik Bulanan",
-
-    "📈 Grafik Pendapatan",
-
-    "📄 Detail Harian"
-
-])
-
-# ======================================================
-# TAB 1
-# ======================================================
-with tab1:
-
-    st.dataframe(
-
-        laporan_bulanan[[
-
-            'Bulan',
-
-            'Jumlah_Hari',
-
-            'Total_Pengunjung',
-
-            'Rata2_Pengunjung_Harian',
-
-            'Total_Pendapatan_Juta',
-
-            'Rata2_Pendapatan_Juta',
-
-            'Total_Hari_Ramai',
-
-            'Persentase_Ramai',
-
-            'Total_Hari_Promo',
-
-            'Total_Hari_Libur',
-
-            'Rata_Rata_Suhu',
-
-            'Rata_Rata_Hujan'
-
-        ]].style.hide(axis="index"),
-
-        use_container_width=True
-
-    )
-
-# ======================================================
-# TAB 2
-# ======================================================
-with tab2:
-
-    fig_bulanan = px.bar(
-
-        laporan_bulanan,
-
-        x='Bulan',
-
-        y='Total_Pendapatan_Juta',
-
-        color='Total_Pendapatan_Juta',
-
-        text='Total_Pendapatan_Juta',
-
-        title='💰 Total Pendapatan Bulanan Café'
-
-    )
-
-    fig_bulanan.update_traces(
-
-        texttemplate='Rp %{text:.2f} Jt',
-
-        textposition='outside'
-
-    )
-
-    fig_bulanan.update_layout(
-
-        yaxis_title='Juta Rupiah',
-
-        xaxis_title='Bulan'
-
-    )
-
-    st.plotly_chart(
-        fig_bulanan,
-        use_container_width=True
-    )
-
-# ======================================================
-# TAB 3
-# ======================================================
-with tab3:
-
-    pilih_bulan = st.selectbox(
-
-        "Pilih Bulan",
-
-        laporan_bulanan['Bulan']
-
-    )
-
-    data_harian = df_simulasi[
-        df_simulasi['Bulan'] == pilih_bulan
-    ].copy()
-
-    data_harian['Tanggal'] = pd.to_datetime(
-        data_harian['Tanggal']
-    ).dt.strftime('%d-%m-%Y')
-
-    data_harian['Hari_Libur'] = (
-        data_harian['Hari_Libur']
-        .map({
-            0: 'Tidak',
-            1: 'Ya'
-        })
-    )
-
-    data_harian['Ada_Promo'] = (
-        data_harian['Ada_Promo']
-        .map({
-            0: 'Tidak',
-            1: 'Ya'
-        })
-    )
-
-    data_harian['Target_Ramai'] = (
-        data_harian['Target_Ramai']
-        .map({
-            0: 'Sepi',
-            1: 'Ramai'
-        })
-    )
-
-    data_harian['Jam_Operasional'] = (
-        data_harian['Jam_Operasional']
-        .map({
-
-            1: 'Pagi',
-
-            2: 'Sore',
-
-            3: 'Malam'
-
-        })
-    )
-
-    # ==================================================
-    # RINGKASAN BULAN
-    # ==================================================
-    total_pengunjung = data_harian[
-        'Jumlah_Pengunjung'
-    ].sum()
-
-    total_pendapatan = data_harian[
-        'Pendapatan_Juta'
-    ].sum()
-
-    rata_pengunjung = round(
-        total_pengunjung / len(data_harian)
-    )
-
-    rata_pendapatan = round(
-        total_pendapatan / len(data_harian),
-        2
-    )
-
-    st.info(
-
-        f"""
-        📅 Bulan : {pilih_bulan}
-
-        👥 Total Pengunjung :
-        {total_pengunjung} Orang
-
-        📊 Rata-rata Pengunjung Harian :
-        {rata_pengunjung} Orang
-
-        💰 Total Pendapatan :
-        Rp {total_pendapatan:.2f} Juta
-
-        💵 Rata-rata Pendapatan Harian :
-        Rp {rata_pendapatan:.2f} Juta
-        """
-
-    )
-
-    st.dataframe(
-
-        data_harian[[
-
-            'Tanggal',
-
-            'Suhu',
-
-            'Hujan',
-
-            'Hari_Libur',
-
-            'Ada_Promo',
-
-            'Jam_Operasional',
-
-            'Jumlah_Pengunjung',
-
-            'Pendapatan_Juta',
-
-            'Target_Ramai'
-
-        ]].style.hide(axis="index"),
-
-        use_container_width=True
-
-    )
-
-# ======================================================
-# LAPORAN KLASIFIKASI
-# ======================================================
-st.markdown("---")
-
-st.subheader("📄 Laporan Klasifikasi AI")
-
-st.text(
-
-    classification_report(
-        y_test,
-        y_pred
-    )
-
-)
-
-# ======================================================
-# FOOTER
-# ======================================================
-st.markdown("---")
-
-st.caption("made with ❤️ by temennya Rafi")
