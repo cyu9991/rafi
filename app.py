@@ -39,7 +39,7 @@ st.sidebar.write("NIM : Isi NIM")
 st.sidebar.write("Kampus : UNTAD")
 
 # ======================================================
-# API CUACA LIVE
+# API CUACA LIVE PALU
 # ======================================================
 url = (
     "https://api.open-meteo.com/v1/forecast"
@@ -68,7 +68,7 @@ except:
     live_rain = 0.0
 
 # ======================================================
-# GENERATE DATASET REALISTIS
+# GENERATE DATASET HARIAN
 # ======================================================
 np.random.seed(42)
 
@@ -117,7 +117,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# NAMA BULAN
+# BULAN
 # ======================================================
 nama_bulan = {
 
@@ -179,89 +179,49 @@ df_simulasi['Target_Ramai'] = (
 ).astype(int)
 
 # ======================================================
-# JUMLAH PENGUNJUNG REALISTIS
+# JUMLAH PENGUNJUNG
 # ======================================================
 jumlah_pengunjung = []
 
 for i in range(n_data):
 
-    ramai = df_simulasi.loc[
-        i,
-        'Target_Ramai'
-    ]
+    ramai = df_simulasi.loc[i, 'Target_Ramai']
 
-    promo = df_simulasi.loc[
-        i,
-        'Ada_Promo'
-    ]
+    promo = df_simulasi.loc[i, 'Ada_Promo']
 
-    libur = df_simulasi.loc[
-        i,
-        'Hari_Libur'
-    ]
+    libur = df_simulasi.loc[i, 'Hari_Libur']
 
-    hujan = df_simulasi.loc[
-        i,
-        'Hujan'
-    ]
+    hujan = df_simulasi.loc[i, 'Hujan']
 
-    jam = df_simulasi.loc[
-        i,
-        'Jam_Operasional'
-    ]
+    jam = df_simulasi.loc[i, 'Jam_Operasional']
 
-    # ==================================================
-    # PENGUNJUNG DASAR
-    # ==================================================
     pengunjung = 40
 
-    # Hari ramai
     if ramai == 1:
-
         pengunjung += 40
 
-    # Promo
     if promo == 1:
-
         pengunjung += 20
 
-    # Hari libur
     if libur == 1:
-
         pengunjung += 30
 
-    # Prime time sore
     if jam == 2:
-
         pengunjung += 25
 
-    # Hujan deras
     if hujan > 7:
-
         pengunjung -= 25
 
-    # Noise kecil
-    pengunjung += np.random.randint(
-        -10,
-        10
-    )
+    pengunjung += np.random.randint(-10, 10)
 
-    # Minimal pengunjung
-    pengunjung = max(
-        pengunjung,
-        15
-    )
+    pengunjung = max(pengunjung, 15)
 
-    jumlah_pengunjung.append(
-        pengunjung
-    )
+    jumlah_pengunjung.append(pengunjung)
 
-df_simulasi[
-    'Jumlah_Pengunjung'
-] = jumlah_pengunjung
+df_simulasi['Jumlah_Pengunjung'] = jumlah_pengunjung
 
 # ======================================================
-# PENDAPATAN REALISTIS
+# PENDAPATAN REALISTIS INDONESIA
 # ======================================================
 pendapatan = []
 
@@ -282,31 +242,20 @@ for i in range(n_data):
         'Hari_Libur'
     ]
 
-    # ==================================================
-    # RATA BELANJA
-    # ==================================================
     rata_belanja = 35000
 
-    # Promo sedikit turunkan omzet per orang
     if promo == 1:
-
         rata_belanja -= 3000
 
-    # Hari libur orang lebih banyak beli
     if libur == 1:
-
         rata_belanja += 5000
 
-    # Noise harga kecil
     rata_belanja += np.random.randint(
         -3000,
         3000
     )
 
-    total = (
-        pengunjung *
-        rata_belanja
-    )
+    total = pengunjung * rata_belanja
 
     pendapatan.append(total)
 
@@ -314,15 +263,14 @@ df_simulasi[
     'Pendapatan_Harian'
 ] = pendapatan
 
-# ======================================================
-# FORMAT JUTA
-# ======================================================
 df_simulasi[
     'Pendapatan_Juta'
 ] = (
+
     df_simulasi[
         'Pendapatan_Harian'
     ] / 1000000
+
 ).round(2)
 
 # ======================================================
@@ -361,7 +309,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ======================================================
-# RANDOM FOREST MODEL
+# MODEL RANDOM FOREST
 # ======================================================
 model = RandomForestClassifier(
 
@@ -378,9 +326,6 @@ model.fit(
     y_train
 )
 
-# ======================================================
-# PREDIKSI TEST
-# ======================================================
 y_pred = model.predict(
     X_test
 )
@@ -411,9 +356,6 @@ st.subheader("📍 Simulasi Kondisi Café")
 
 col1, col2, col3 = st.columns(3)
 
-# ======================================================
-# KOLOM 1
-# ======================================================
 with col1:
 
     st.info(
@@ -425,92 +367,62 @@ with col1:
     )
 
     input_suhu = st.number_input(
-
         "Input Suhu",
-
         min_value=20.0,
-
         max_value=40.0,
-
         value=float(live_temp)
-
     )
 
     input_hujan = st.number_input(
-
         "Input Curah Hujan",
-
         min_value=0.0,
-
         max_value=20.0,
-
         value=float(live_rain)
-
     )
 
-# ======================================================
-# KOLOM 2
-# ======================================================
 with col2:
 
     input_libur = st.selectbox(
-
         "Status Hari",
-
         [0, 1],
-
         format_func=lambda x:
         "Hari Kerja"
         if x == 0
         else "Hari Libur"
-
     )
 
     input_promo = st.selectbox(
-
         "Program Promo",
-
         [0, 1],
-
         format_func=lambda x:
         "Tidak Ada Promo"
         if x == 0
         else "Ada Promo"
-
     )
 
-# ======================================================
-# KOLOM 3
-# ======================================================
 with col3:
 
     input_jam = st.selectbox(
-
         "Jam Operasional",
-
         [1, 2, 3],
-
         format_func=lambda x:
         "Pagi"
         if x == 1
         else "Sore"
         if x == 2
         else "Malam"
-
     )
 
 # ======================================================
 # BUTTON ANALISIS
 # ======================================================
-st.markdown("")
-
 analisis = st.button(
     "🔍 Analisis AI Sekarang",
     use_container_width=True
 )
 
 # ======================================================
-# HASIL ANALISIS AI
+# HASIL AI
 # ======================================================
 if analisis:
 
@@ -535,24 +447,20 @@ if analisis:
     persen_ramai = probability[1] * 100
 
     # ==================================================
-    # ESTIMASI PENGUNJUNG LEBIH REALISTIS
+    # ESTIMASI PENGUNJUNG
     # ==================================================
     estimasi_pengunjung = 40
 
     if input_promo == 1:
-
         estimasi_pengunjung += 30
 
     if input_libur == 1:
-
         estimasi_pengunjung += 40
 
     if input_jam == 2:
-
         estimasi_pengunjung += 25
 
     if input_hujan > 7:
-
         estimasi_pengunjung -= 20
 
     estimasi_pengunjung = max(
@@ -566,11 +474,9 @@ if analisis:
     rata_belanja = 35000
 
     if input_promo == 1:
-
         rata_belanja -= 3000
 
     if input_libur == 1:
-
         rata_belanja += 5000
 
     estimasi_pendapatan = (
@@ -582,48 +488,42 @@ if analisis:
 
     st.subheader("🤖 Hasil Analisis AI")
 
-    # ==================================================
-    # RAMAI
-    # ==================================================
     if prediction == 1:
 
         st.error(
             f"""
             🔥 Café Diprediksi Akan RAMAI
-            
+
             📌 Keyakinan AI:
             {persen_ramai:.2f}%
-            
+
             👥 Estimasi Pengunjung:
             {estimasi_pengunjung} Orang
-            
+
             💰 Estimasi Pendapatan:
             Rp {estimasi_pendapatan:.2f} Juta
             """
         )
 
-    # ==================================================
-    # SEPI
-    # ==================================================
     else:
 
         st.success(
             f"""
             😌 Café Diprediksi Normal / Sepi
-            
+
             📌 Keyakinan AI:
             {persen_sepi:.2f}%
-            
+
             👥 Estimasi Pengunjung:
             {estimasi_pengunjung} Orang
-            
+
             💰 Estimasi Pendapatan:
             Rp {estimasi_pendapatan:.2f} Juta
             """
         )
 
 # ======================================================
-# DASHBOARD
+# DASHBOARD ANALITIK
 # ======================================================
 st.markdown("---")
 
@@ -741,7 +641,7 @@ laporan_bulanan = df_simulasi.groupby(
 })
 
 # ======================================================
-# JUMLAH HARI
+# TAMBAH JUMLAH HARI
 # ======================================================
 laporan_bulanan['Jumlah_Hari'] = (
     laporan_bulanan['Bulan']
@@ -765,7 +665,7 @@ laporan_bulanan[
         'Jumlah_Hari'
     ]
 
-).astype(int)
+).round(0).astype(int)
 
 laporan_bulanan[
     'Rata2_Pendapatan_Juta'
@@ -791,7 +691,6 @@ laporan_bulanan[
 ] = (
 
     (
-
         laporan_bulanan[
             'Target_Ramai'
         ]
@@ -807,7 +706,7 @@ laporan_bulanan[
 ).round(1)
 
 # ======================================================
-# UBAH NAMA KOLOM
+# FORMAT DATA
 # ======================================================
 laporan_bulanan.columns = [
 
@@ -839,9 +738,6 @@ laporan_bulanan.columns = [
 
 ]
 
-# ======================================================
-# BULATKAN ANGKA
-# ======================================================
 laporan_bulanan[
     'Rata_Rata_Suhu'
 ] = laporan_bulanan[
@@ -860,12 +756,16 @@ laporan_bulanan[
     'Total_Pendapatan_Juta'
 ].round(2)
 
+laporan_bulanan = laporan_bulanan.sort_values(
+    by='No_Bulan'
+)
+
 # ======================================================
-# TABS LAPORAN
+# TAB LAPORAN
 # ======================================================
 st.markdown("---")
 
-st.subheader("📋 Laporan Statistik Januari - April")
+st.subheader("📋 Statistik Café Januari - April")
 
 tab1, tab2, tab3 = st.tabs([
 
@@ -931,9 +831,25 @@ with tab2:
 
         color='Total_Pendapatan_Juta',
 
-        text_auto=True,
+        text='Total_Pendapatan_Juta',
 
-        title='💰 Pendapatan Café (Juta Rupiah)'
+        title='💰 Total Pendapatan Bulanan Café'
+
+    )
+
+    fig_bulanan.update_traces(
+
+        texttemplate='Rp %{text:.2f} Jt',
+
+        textposition='outside'
+
+    )
+
+    fig_bulanan.update_layout(
+
+        yaxis_title='Juta Rupiah',
+
+        xaxis_title='Bulan'
 
     )
 
@@ -957,10 +873,87 @@ with tab3:
 
     data_harian = df_simulasi[
         df_simulasi['Bulan'] == pilih_bulan
-    ]
+    ].copy()
 
-    st.subheader(
-        f"📅 Data Harian Bulan {pilih_bulan}"
+    data_harian['Tanggal'] = pd.to_datetime(
+        data_harian['Tanggal']
+    ).dt.strftime('%d-%m-%Y')
+
+    data_harian['Hari_Libur'] = (
+        data_harian['Hari_Libur']
+        .map({
+            0: 'Tidak',
+            1: 'Ya'
+        })
+    )
+
+    data_harian['Ada_Promo'] = (
+        data_harian['Ada_Promo']
+        .map({
+            0: 'Tidak',
+            1: 'Ya'
+        })
+    )
+
+    data_harian['Target_Ramai'] = (
+        data_harian['Target_Ramai']
+        .map({
+            0: 'Sepi',
+            1: 'Ramai'
+        })
+    )
+
+    data_harian['Jam_Operasional'] = (
+        data_harian['Jam_Operasional']
+        .map({
+
+            1: 'Pagi',
+
+            2: 'Sore',
+
+            3: 'Malam'
+
+        })
+    )
+
+    # ==================================================
+    # RINGKASAN BULAN
+    # ==================================================
+    total_pengunjung = data_harian[
+        'Jumlah_Pengunjung'
+    ].sum()
+
+    total_pendapatan = data_harian[
+        'Pendapatan_Juta'
+    ].sum()
+
+    rata_pengunjung = round(
+        total_pengunjung / len(data_harian)
+    )
+
+    rata_pendapatan = round(
+        total_pendapatan / len(data_harian),
+        2
+    )
+
+    st.info(
+
+        f"""
+        📅 Bulan : {pilih_bulan}
+
+        👥 Total Pengunjung :
+        {total_pengunjung} Orang
+
+        📊 Rata-rata Pengunjung Harian :
+        {rata_pengunjung} Orang
+
+        💰 Total Pendapatan :
+        Rp {total_pendapatan:.2f} Juta
+
+        💵 Rata-rata Pendapatan Harian :
+        Rp {rata_pendapatan:.2f} Juta
+        """
+
     )
 
     st.dataframe(
@@ -999,10 +992,12 @@ st.markdown("---")
 st.subheader("📄 Laporan Klasifikasi AI")
 
 st.text(
+
     classification_report(
         y_test,
         y_pred
     )
+
 )
 
 # ======================================================
