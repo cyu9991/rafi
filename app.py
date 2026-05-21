@@ -9,7 +9,6 @@ from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import (
     accuracy_score,
-    confusion_matrix,
     classification_report
 )
 
@@ -272,54 +271,32 @@ feature_cols = [
 
 ]
 
-X = df_simulasi[
-    feature_cols
-]
-
-y = df_simulasi[
-    'Target_Ramai'
-]
+X = df_simulasi[feature_cols]
+y = df_simulasi['Target_Ramai']
 
 # ======================================================
 # SPLIT DATA
 # ======================================================
 X_train, X_test, y_train, y_test = train_test_split(
-
-    X,
-    y,
-
+    X, y,
     test_size=0.2,
-
     random_state=42
-
 )
 
 # ======================================================
 # MODEL RANDOM FOREST
 # ======================================================
 model = RandomForestClassifier(
-
     n_estimators=100,
-
     max_depth=5,
-
     random_state=42
-
 )
 
-model.fit(
-    X_train,
-    y_train
-)
+model.fit(X_train, y_train)
 
-y_pred = model.predict(
-    X_test
-)
+y_pred = model.predict(X_test)
 
-accuracy = accuracy_score(
-    y_test,
-    y_pred
-)
+accuracy = accuracy_score(y_test, y_pred)
 
 # ======================================================
 # AKURASI MODEL
@@ -372,18 +349,14 @@ with col2:
         "Status Hari",
         [0, 1],
         format_func=lambda x:
-        "Hari Kerja"
-        if x == 0
-        else "Hari Libur"
+        "Hari Kerja" if x == 0 else "Hari Libur"
     )
 
     input_promo = st.selectbox(
         "Program Promo",
         [0, 1],
         format_func=lambda x:
-        "Tidak Ada Promo"
-        if x == 0
-        else "Ada Promo"
+        "Tidak Ada Promo" if x == 0 else "Ada Promo"
     )
 
 with col3:
@@ -416,86 +389,64 @@ if analisis:
         input_shift
     ]], columns=feature_cols)
 
-    prediction = model.predict(
-        current_data
-    )[0]
+    prediction = model.predict(current_data)[0]
 
-    probability = model.predict_proba(
-        current_data
-    )[0]
+    probability = model.predict_proba(current_data)[0]
 
     persen_sepi = probability[0] * 100
-
     persen_ramai = probability[1] * 100
 
     estimasi_pengunjung = 20
 
     if input_promo == 1:
         estimasi_pengunjung += 10
-
     if input_libur == 1:
         estimasi_pengunjung += 15
-
     if input_shift == 2:
         estimasi_pengunjung += 15
-
     if input_hujan > 7:
         estimasi_pengunjung -= 10
 
-    estimasi_pengunjung = max(
-        estimasi_pengunjung,
-        5
-    )
+    estimasi_pengunjung = max(estimasi_pengunjung, 5)
 
     rata_belanja = 15000
 
-    estimasi_pendapatan = (
-        estimasi_pengunjung *
-        rata_belanja
-    )
+    estimasi_pendapatan = estimasi_pengunjung * rata_belanja
 
-    pendapatan_format = (
-        f"Rp {estimasi_pendapatan:,}"
-        .replace(",", ".")
-    )
+    pendapatan_format = f"Rp {estimasi_pendapatan:,}".replace(",", ".")
 
     st.markdown("---")
-
     st.subheader("🤖 Hasil Analisis AI")
 
     if prediction == 1:
 
-        st.error(
-            f"""
-            🔥 Café Diprediksi Akan RAMAI
+        st.error(f"""
+        🔥 Café Diprediksi Akan RAMAI
 
-            📌 Keyakinan AI:
-            {persen_ramai:.2f}%
+        📌 Keyakinan AI:
+        {persen_ramai:.2f}%
 
-            👥 Estimasi Pengunjung:
-            {estimasi_pengunjung} Orang
+        👥 Estimasi Pengunjung:
+        {estimasi_pengunjung} Orang
 
-            💰 Estimasi Pendapatan:
-            {pendapatan_format}
-            """
-        )
+        💰 Estimasi Pendapatan:
+        {pendapatan_format}
+        """)
 
     else:
 
-        st.success(
-            f"""
-            😌 Café Diprediksi Normal / Sepi
+        st.success(f"""
+        😌 Café Diprediksi Normal / Sepi
 
-            📌 Keyakinan AI:
-            {persen_sepi:.2f}%
+        📌 Keyakinan AI:
+        {persen_sepi:.2f}%
 
-            👥 Estimasi Pengunjung:
-            {estimasi_pengunjung} Orang
+        👥 Estimasi Pengunjung:
+        {estimasi_pengunjung} Orang
 
-            💰 Estimasi Pendapatan:
-            {pendapatan_format}
-            """
-        )
+        💰 Estimasi Pendapatan:
+        {pendapatan_format}
+        """)
 
 # ======================================================
 # DASHBOARD ANALITIK
@@ -504,81 +455,24 @@ st.markdown("---")
 
 st.subheader("📊 Dashboard Analitik Café")
 
-g1, g2 = st.columns(2)
+g1, _ = st.columns(2)
 
 with g1:
 
     importance_df = pd.DataFrame({
-
-        'Faktor': [
-
-            'Suhu',
-            'Curah Hujan',
-            'Hari Libur',
-            'Promo',
-            'Shift'
-
-        ],
-
-        'Pengaruh':
-        model.feature_importances_
-
+        'Faktor': ['Suhu', 'Curah Hujan', 'Hari Libur', 'Promo', 'Shift'],
+        'Pengaruh': model.feature_importances_
     })
 
     fig_bar = px.bar(
-
         importance_df,
-
         x='Faktor',
-
         y='Pengaruh',
-
         color='Pengaruh',
-
         title='🔥 Faktor Paling Berpengaruh'
-
     )
 
-    st.plotly_chart(
-        fig_bar,
-        use_container_width=True
-    )
-
-with g2:
-
-    cm = confusion_matrix(
-        y_test,
-        y_pred
-    )
-
-    fig_cm = ff.create_annotated_heatmap(
-
-        z=cm,
-
-        x=[
-            'Prediksi Sepi',
-            'Prediksi Ramai'
-        ],
-
-        y=[
-            'Asli Sepi',
-            'Asli Ramai'
-        ],
-
-        annotation_text=cm.astype(str),
-
-        colorscale='Viridis'
-
-    )
-
-    fig_cm.update_layout(
-        title='🧠 Confusion Matrix'
-    )
-
-    st.plotly_chart(
-        fig_cm,
-        use_container_width=True
-    )
+    st.plotly_chart(fig_bar, use_container_width=True)
 
 # ======================================================
 # LAPORAN BULANAN
@@ -587,86 +481,45 @@ st.markdown("---")
 
 st.subheader("📈 Laporan Statistik Bulanan")
 
-laporan_bulanan = df_simulasi.groupby(
-    'Bulan',
-    sort=False
-).agg({
-
+laporan_bulanan = df_simulasi.groupby('Bulan', sort=False).agg({
     'Jumlah_Pengunjung': 'sum',
     'Pendapatan_Harian': 'sum',
     'Suhu': 'mean',
     'Hujan': 'mean'
-
 }).reset_index()
 
 laporan_bulanan.columns = [
-
     'Bulan',
     'Total Pengunjung',
     'Total Pendapatan',
     'Rata-rata Suhu',
     'Rata-rata Hujan'
-
 ]
 
-laporan_bulanan['Rata-rata Suhu'] = (
-    laporan_bulanan['Rata-rata Suhu']
-    .astype(int)
+laporan_bulanan['Rata-rata Suhu'] = laporan_bulanan['Rata-rata Suhu'].astype(int)
+laporan_bulanan['Rata-rata Hujan'] = laporan_bulanan['Rata-rata Hujan'].astype(int)
+
+laporan_bulanan['Total Pendapatan'] = laporan_bulanan['Total Pendapatan'].apply(
+    lambda x: f"Rp {x:,}".replace(",", ".")
 )
 
-laporan_bulanan['Rata-rata Hujan'] = (
-    laporan_bulanan['Rata-rata Hujan']
-    .astype(int)
-)
-
-laporan_bulanan['Total Pendapatan'] = (
-    laporan_bulanan['Total Pendapatan']
-    .apply(
-        lambda x:
-        f"Rp {x:,}".replace(",", ".")
-    )
-)
-
-st.dataframe(
-
-    laporan_bulanan,
-
-    use_container_width=True,
-
-    hide_index=True
-
-)
+st.dataframe(laporan_bulanan, use_container_width=True, hide_index=True)
 
 # ======================================================
 # GRAFIK PENDAPATAN
 # ======================================================
-grafik_data = df_simulasi.groupby(
-    'Bulan',
-    sort=False
-)['Pendapatan_Harian'].sum().reset_index()
-
-grafik_data['Pendapatan_Juta'] = (
-    grafik_data['Pendapatan_Harian'] / 1000000
-).round(2)
+grafik_data = df_simulasi.groupby('Bulan', sort=False)['Pendapatan_Harian'].sum().reset_index()
+grafik_data['Pendapatan_Juta'] = (grafik_data['Pendapatan_Harian'] / 1_000_000).round(2)
 
 fig_income = px.bar(
-
     grafik_data,
-
     x='Bulan',
-
     y='Pendapatan_Juta',
-
     text='Pendapatan_Juta',
-
     title='💰 Pendapatan Bulanan Café'
-
 )
 
-st.plotly_chart(
-    fig_income,
-    use_container_width=True
-)
+st.plotly_chart(fig_income, use_container_width=True)
 
 # ======================================================
 # DETAIL DATA HARIAN + SHIFT
@@ -690,102 +543,49 @@ for i in range(len(df_simulasi)):
 
         if shift == 1:
             pengunjung = np.random.randint(8, 25)
-
         elif shift == 2:
             pengunjung = np.random.randint(20, 45)
-
         else:
             pengunjung = np.random.randint(10, 30)
 
         if libur == 1:
             pengunjung += 8
-
         if promo == 1:
             pengunjung += 5
-
         if hujan > 7:
             pengunjung -= 5
 
         pengunjung = max(pengunjung, 5)
 
-        rata_belanja = np.random.randint(
-            12000,
-            18000
-        )
-
+        rata_belanja = np.random.randint(12000, 18000)
         pendapatan = pengunjung * rata_belanja
 
         detail_shift.append({
-
             'Tanggal': tanggal,
             'Bulan': bulan,
             'Shift': f"Shift {shift}",
             'Suhu °C': suhu,
             'Hujan mm': hujan,
-
-            'Hari Libur':
-            "Ya" if libur == 1 else "Tidak",
-
-            'Promo':
-            "Ya" if promo == 1 else "Tidak",
-
+            'Hari Libur': "Ya" if libur == 1 else "Tidak",
+            'Promo': "Ya" if promo == 1 else "Tidak",
             'Pengunjung': pengunjung,
-
-            'Pendapatan':
-            f"Rp {pendapatan:,}".replace(",", ".")
-
+            'Pendapatan': f"Rp {pendapatan:,}".replace(",", ".")
         })
 
 df_detail_shift = pd.DataFrame(detail_shift)
 
 # ======================================================
-# FILTER BULAN
+# FILTER
 # ======================================================
-bulan_pilih = st.selectbox(
+bulan_pilih = st.selectbox("Pilih Bulan", df_detail_shift['Bulan'].unique())
+shift_pilih = st.selectbox("Pilih Shift", ['Shift 1', 'Shift 2', 'Shift 3'])
 
-    "Pilih Bulan",
-
-    df_detail_shift['Bulan']
-    .unique()
-
-)
-
-# ======================================================
-# FILTER SHIFT
-# ======================================================
-shift_pilih = st.selectbox(
-
-    "Pilih Shift",
-
-    ['Shift 1', 'Shift 2', 'Shift 3']
-
-)
-
-# ======================================================
-# FILTER DATA
-# ======================================================
 hasil_filter = df_detail_shift[
-
-    (df_detail_shift['Bulan'] == bulan_pilih)
-
-    &
-
+    (df_detail_shift['Bulan'] == bulan_pilih) &
     (df_detail_shift['Shift'] == shift_pilih)
-
 ]
 
-# ======================================================
-# TAMPILKAN DATA
-# ======================================================
-st.dataframe(
-
-    hasil_filter,
-
-    use_container_width=True,
-
-    hide_index=True
-
-)
+st.dataframe(hasil_filter, use_container_width=True, hide_index=True)
 
 # ======================================================
 # CLASSIFICATION REPORT
@@ -794,20 +594,11 @@ st.markdown("---")
 
 st.subheader("📄 Laporan Klasifikasi AI")
 
-st.text(
-
-    classification_report(
-        y_test,
-        y_pred
-    )
-
-)
+st.text(classification_report(y_test, y_pred))
 
 # ======================================================
 # FOOTER
 # ======================================================
 st.markdown("---")
 
-st.caption(
-    "made with ❤️ by temennya Rafi"
-)
+st.caption("made with ❤️ by temennya Rafi")
