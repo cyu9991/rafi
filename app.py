@@ -57,13 +57,13 @@ try:
 
     current_weather = data['current']
 
-    live_temp = current_weather['temperature_2m']
+    live_temp = int(current_weather['temperature_2m'])
 
     live_rain = current_weather['precipitation']
 
 except:
 
-    live_temp = 28.0
+    live_temp = 28
 
     live_rain = 0.0
 
@@ -84,9 +84,9 @@ df_simulasi = pd.DataFrame({
 
     'Tanggal': tanggal,
 
-    'Suhu': np.random.uniform(
+    'Suhu': np.random.randint(
         25,
-        33,
+        34,
         n_data
     ),
 
@@ -94,7 +94,7 @@ df_simulasi = pd.DataFrame({
         0,
         10,
         n_data
-    ),
+    ).round(1),
 
     'Hari_Libur': np.random.choice(
         [0, 1],
@@ -238,9 +238,6 @@ for i in range(n_data):
         'Jam_Operasional'
     ]
 
-    # ==========================================
-    # RATA-RATA BELANJA
-    # ==========================================
     rata_belanja = 12000
 
     if libur == 1:
@@ -257,9 +254,6 @@ for i in range(n_data):
         1000
     )
 
-    # ==========================================
-    # TOTAL PENDAPATAN
-    # ==========================================
     total = pengunjung * rata_belanja
 
     total = min(total, 750000)
@@ -348,10 +342,7 @@ accuracy = accuracy_score(
 st.subheader("🎯 Akurasi AI")
 
 st.success(
-    f"""
-    Tingkat Akurasi Model:
-    {accuracy * 100:.2f}%
-    """
+    f"Tingkat Akurasi Model: {accuracy * 100:.2f}%"
 )
 
 # ======================================================
@@ -375,9 +366,9 @@ with col1:
 
     input_suhu = st.number_input(
         "Input Suhu",
-        min_value=20.0,
-        max_value=40.0,
-        value=float(live_temp)
+        min_value=20,
+        max_value=40,
+        value=live_temp
     )
 
     input_hujan = st.number_input(
@@ -480,6 +471,94 @@ if analisis:
         )
 
 # ======================================================
+# DASHBOARD ANALITIK
+# ======================================================
+st.markdown("---")
+
+st.subheader("📊 Dashboard Analitik Café")
+
+g1, g2 = st.columns(2)
+
+with g1:
+
+    importance_df = pd.DataFrame({
+
+        'Faktor': [
+
+            'Suhu',
+            'Curah Hujan',
+            'Hari Libur',
+            'Promo',
+            'Jam Operasional'
+
+        ],
+
+        'Pengaruh':
+        model.feature_importances_
+
+    })
+
+    importance_df = importance_df.sort_values(
+        by='Pengaruh',
+        ascending=False
+    )
+
+    fig_bar = px.bar(
+
+        importance_df,
+
+        x='Faktor',
+
+        y='Pengaruh',
+
+        color='Pengaruh',
+
+        title='🔥 Faktor Paling Berpengaruh'
+
+    )
+
+    st.plotly_chart(
+        fig_bar,
+        use_container_width=True
+    )
+
+with g2:
+
+    cm = confusion_matrix(
+        y_test,
+        y_pred
+    )
+
+    fig_cm = ff.create_annotated_heatmap(
+
+        z=cm,
+
+        x=[
+            'Prediksi Sepi',
+            'Prediksi Ramai'
+        ],
+
+        y=[
+            'Asli Sepi',
+            'Asli Ramai'
+        ],
+
+        annotation_text=cm.astype(str),
+
+        colorscale='Viridis'
+
+    )
+
+    fig_cm.update_layout(
+        title='🧠 Confusion Matrix'
+    )
+
+    st.plotly_chart(
+        fig_cm,
+        use_container_width=True
+    )
+
+# ======================================================
 # LAPORAN BULANAN
 # ======================================================
 st.markdown("---")
@@ -508,15 +587,24 @@ laporan_bulanan.columns = [
 
 ]
 
-laporan_bulanan[
-    'Total Pendapatan'
-] = (
+laporan_bulanan['Rata-rata Suhu'] = (
+    laporan_bulanan['Rata-rata Suhu']
+    .round(0)
+    .astype(int)
+)
 
-    laporan_bulanan[
-        'Total Pendapatan'
-    ] / 1000000
+laporan_bulanan['Rata-rata Hujan'] = (
+    laporan_bulanan['Rata-rata Hujan']
+    .round(1)
+)
 
-).round(2)
+laporan_bulanan['Total Pendapatan'] = (
+    laporan_bulanan['Total Pendapatan']
+    .apply(
+        lambda x:
+        f"Rp {x:,.0f}"
+    )
+)
 
 st.dataframe(
 
@@ -529,19 +617,43 @@ st.dataframe(
 )
 
 # ======================================================
+# DATA GRAFIK
+# ======================================================
+grafik_pendapatan = df_simulasi.groupby(
+    'Bulan',
+    sort=False
+)['Pendapatan_Harian'].sum().reset_index()
+
+# ======================================================
 # GRAFIK PENDAPATAN
 # ======================================================
 fig_income = px.bar(
 
-    laporan_bulanan,
+    grafik_pendapatan,
 
     x='Bulan',
 
-    y='Total Pendapatan',
+    y='Pendapatan_Harian',
 
-    text='Total Pendapatan',
+    text='Pendapatan_Harian',
 
     title='💰 Pendapatan Bulanan Café Pinggir Jalan'
+
+)
+
+fig_income.update_traces(
+
+    texttemplate='Rp %{text:,.0f}',
+
+    textposition='outside'
+
+)
+
+fig_income.update_layout(
+
+    yaxis_title='Pendapatan',
+
+    xaxis_title='Bulan'
 
 )
 
@@ -575,7 +687,7 @@ detail_harian = df_simulasi[
     'Ada_Promo',
     'Jam_Operasional',
     'Jumlah_Pengunjung',
-    'Pendapatan_Juta'
+    'Pendapatan_Harian'
 ]]
 
 detail_harian = detail_harian.rename(columns={
@@ -586,9 +698,14 @@ detail_harian = detail_harian.rename(columns={
     'Ada_Promo': 'Promo',
     'Jam_Operasional': 'Shift',
     'Jumlah_Pengunjung': 'Pengunjung',
-    'Pendapatan_Juta': 'Pendapatan (Juta)'
+    'Pendapatan_Harian': 'Pendapatan'
 
 })
+
+detail_harian['Pendapatan'] = (
+    detail_harian['Pendapatan']
+    .apply(lambda x: f"Rp {x:,.0f}")
+)
 
 st.dataframe(
 
