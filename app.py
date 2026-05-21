@@ -3,7 +3,6 @@ import pandas as pd
 import requests
 import plotly.express as px
 import plotly.figure_factory as ff
-import numpy as np
 
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.model_selection import train_test_split
@@ -14,7 +13,7 @@ from sklearn.metrics import (
 )
 
 # ======================================================
-# SETUP STREAMLIT
+# STREAMLIT
 # ======================================================
 st.set_page_config(
     page_title="Cafe Analytics AI Pro",
@@ -23,44 +22,41 @@ st.set_page_config(
 )
 
 st.title("☕ Cafe Analytics AI Pro")
-st.write("Sistem Analisis & Prediksi Kepadatan Pengunjung Café Menggunakan Random Forest")
+st.write("Sistem Prediksi Kepadatan Pengunjung Café")
 
 # ======================================================
-# SIDEBAR IDENTITAS
+# SIDEBAR
 # ======================================================
 st.sidebar.header("📝 Identitas Mahasiswa")
 st.sidebar.write("Nama : Isi Nama")
-st.sidebar.write("NIM  : Isi NIM")
+st.sidebar.write("NIM : Isi NIM")
 st.sidebar.write("Kampus : UNTAD")
 
 # ======================================================
-# API CUACA LIVE PALU
+# API CUACA
 # ======================================================
 url = (
     "https://api.open-meteo.com/v1/forecast"
     "?latitude=-0.8917"
     "&longitude=119.8707"
-    "&current=temperature_2m,relative_humidity_2m,precipitation,wind_speed_10m"
+    "&current=temperature_2m,precipitation"
     "&timezone=Asia%2FMakassar"
 )
 
 try:
-    response = requests.get(url)
-    data = response.json()
+    data = requests.get(url).json()
 
-    current_weather = data['current']
-
-    live_temp = current_weather['temperature_2m']
-    live_rain = current_weather['precipitation']
+    live_temp = data['current']['temperature_2m']
+    live_rain = data['current']['precipitation']
 
 except:
     live_temp = 28.0
     live_rain = 0.0
 
 # ======================================================
-# DATASET HISTORIS CAFE
+# DATASET CAFE
 # ======================================================
-df_simulasi = pd.DataFrame({
+df = pd.DataFrame({
 
     'Nama_Cafe': [
         'Cafe Senja',
@@ -156,7 +152,7 @@ df_simulasi = pd.DataFrame({
 # ======================================================
 # FEATURE & TARGET
 # ======================================================
-feature_cols = [
+fitur = [
     'Suhu',
     'Hujan',
     'Hari_Libur',
@@ -167,11 +163,11 @@ feature_cols = [
     'WiFi_Cepat'
 ]
 
-X = df_simulasi[feature_cols]
-y = df_simulasi['Target_Ramai']
+X = df[fitur]
+y = df['Target_Ramai']
 
 # ======================================================
-# SPLIT DATA
+# TRAINING MODEL
 # ======================================================
 X_train, X_test, y_train, y_test = train_test_split(
     X,
@@ -180,9 +176,6 @@ X_train, X_test, y_train, y_test = train_test_split(
     random_state=42
 )
 
-# ======================================================
-# MODEL RANDOM FOREST
-# ======================================================
 model = RandomForestClassifier(
     n_estimators=200,
     max_depth=10,
@@ -192,183 +185,168 @@ model = RandomForestClassifier(
 model.fit(X_train, y_train)
 
 # ======================================================
-# PREDIKSI TEST
+# HASIL AKURASI
 # ======================================================
 y_pred = model.predict(X_test)
 
-accuracy = accuracy_score(y_test, y_pred)
+akurasi = accuracy_score(y_test, y_pred)
 
-# ======================================================
-# METRIK AKURASI
-# ======================================================
 st.subheader("🎯 Akurasi AI")
-
-st.success(
-    f"Akurasi Model Random Forest: {accuracy * 100:.2f}%"
-)
+st.success(f"Akurasi Model: {akurasi * 100:.2f}%")
 
 # ======================================================
 # INPUT USER
 # ======================================================
-st.subheader("📍 Simulasi Kondisi Café Saat Ini")
+st.subheader("📍 Simulasi Kondisi Café")
 
 col1, col2, col3 = st.columns(3)
 
 with col1:
 
-    st.info(
-        f"""
-        🌡️ Suhu Live : {live_temp} °C
-        🌧️ Curah Hujan : {live_rain} mm
-        """
-    )
+    st.info(f"""
+    🌡️ Suhu : {live_temp}°C
+    🌧️ Hujan : {live_rain} mm
+    """)
 
-    input_suhu = st.number_input(
+    suhu = st.number_input(
         "Input Suhu",
         value=float(live_temp)
     )
 
-    input_hujan = st.number_input(
-        "Input Curah Hujan",
+    hujan = st.number_input(
+        "Input Hujan",
         value=float(live_rain)
     )
 
 with col2:
 
-    input_libur = st.selectbox(
-        "Status Hari",
-        options=[0, 1],
+    libur = st.selectbox(
+        "Hari",
+        [0, 1],
         format_func=lambda x:
         "Hari Kerja" if x == 0 else "Hari Libur"
     )
 
-    input_promo = st.selectbox(
-        "Promo Café",
-        options=[0, 1],
+    promo = st.selectbox(
+        "Promo",
+        [0, 1],
         format_func=lambda x:
-        "Tidak Ada Promo" if x == 0 else "Ada Promo"
+        "Tidak Ada" if x == 0 else "Ada Promo"
     )
 
-    input_jam = st.selectbox(
+    jam = st.selectbox(
         "Jam Operasional",
-        options=[1, 2, 3],
+        [1, 2, 3],
         format_func=lambda x:
         "Pagi" if x == 1
-        else "Sore"
-        if x == 2
+        else "Sore" if x == 2
         else "Malam"
     )
 
 with col3:
 
-    input_rating = st.slider(
+    rating = st.slider(
         "Rating Café",
         1.0,
         5.0,
         4.5
     )
 
-    input_music = st.selectbox(
+    music = st.selectbox(
         "Live Music",
-        options=[0, 1],
+        [0, 1],
         format_func=lambda x:
         "Tidak Ada" if x == 0 else "Ada"
     )
 
-    input_wifi = st.selectbox(
+    wifi = st.selectbox(
         "WiFi Cepat",
-        options=[0, 1],
+        [0, 1],
         format_func=lambda x:
         "Tidak" if x == 0 else "Ya"
     )
 
 # ======================================================
-# DATA PREDIKSI
+# PREDIKSI
 # ======================================================
-current_data = pd.DataFrame([[
+data_baru = pd.DataFrame([[
+    suhu,
+    hujan,
+    libur,
+    promo,
+    jam,
+    rating,
+    music,
+    wifi
+]], columns=fitur)
 
-    input_suhu,
-    input_hujan,
-    input_libur,
-    input_promo,
-    input_jam,
-    input_rating,
-    input_music,
-    input_wifi
-
-]], columns=feature_cols)
+prediksi = model.predict(data_baru)[0]
 
 # ======================================================
-# HASIL PREDIKSI
+# HASIL
 # ======================================================
-prediction = model.predict(current_data)[0]
+st.subheader("🤖 Hasil Prediksi")
 
-st.subheader("🤖 Hasil Prediksi AI")
-
-if prediction == 1:
+if prediksi == 1:
 
     st.error("""
-    🔥 Café Diprediksi Akan RAMAI
-    
-    Rekomendasi:
-    ✅ Tambah stok bahan
+    🔥 Café Diprediksi RAMAI
+
+    ✅ Tambah stok
     ✅ Tambah pegawai
-    ✅ Siapkan meja tambahan
+    ✅ Siapkan meja
     """)
 
 else:
 
     st.success("""
-    😌 Café Diprediksi Normal / Sepi
-    
-    Rekomendasi:
+    😌 Café Diprediksi SEPI
+
     ✅ Hemat operasional
     ✅ Fokus promosi
-    ✅ Optimasi pelayanan
     """)
 
 # ======================================================
 # VISUALISASI
 # ======================================================
 st.markdown("---")
+st.subheader("📊 Dashboard Analitik")
 
-st.subheader("📊 Dashboard Analitik Café")
-
-g1, g2 = st.columns(2)
+c1, c2 = st.columns(2)
 
 # ======================================================
 # FEATURE IMPORTANCE
 # ======================================================
-with g1:
+with c1:
 
-    importance_df = pd.DataFrame({
-        'Faktor': feature_cols,
+    importance = pd.DataFrame({
+        'Faktor': fitur,
         'Pengaruh': model.feature_importances_
     })
 
-    importance_df = importance_df.sort_values(
+    importance = importance.sort_values(
         by='Pengaruh',
         ascending=False
     )
 
-    fig_bar = px.bar(
-        importance_df,
+    fig1 = px.bar(
+        importance,
         x='Faktor',
         y='Pengaruh',
         color='Pengaruh',
-        title='🔥 Faktor Paling Berpengaruh'
+        title='🔥 Faktor Pengaruh'
     )
 
-    st.plotly_chart(fig_bar, use_container_width=True)
+    st.plotly_chart(fig1, use_container_width=True)
 
 # ======================================================
 # CONFUSION MATRIX
 # ======================================================
-with g2:
+with c2:
 
     cm = confusion_matrix(y_test, y_pred)
 
-    fig_cm = ff.create_annotated_heatmap(
+    fig2 = ff.create_annotated_heatmap(
         z=cm,
         x=['Prediksi Sepi', 'Prediksi Ramai'],
         y=['Asli Sepi', 'Asli Ramai'],
@@ -376,36 +354,33 @@ with g2:
         colorscale='Viridis'
     )
 
-    fig_cm.update_layout(
+    fig2.update_layout(
         title='🧠 Confusion Matrix'
     )
 
-    st.plotly_chart(fig_cm, use_container_width=True)
+    st.plotly_chart(fig2, use_container_width=True)
 
 # ======================================================
 # GRAFIK PENDAPATAN
 # ======================================================
-st.subheader("💰 Analisis Pendapatan Café")
+st.subheader("💰 Pendapatan Café")
 
-fig_income = px.line(
-    df_simulasi,
+fig3 = px.line(
+    df,
     x='Nama_Cafe',
     y='Pendapatan_Harian',
     markers=True,
-    title='Pendapatan Harian Café'
+    title='Pendapatan Harian'
 )
 
-st.plotly_chart(fig_income, use_container_width=True)
+st.plotly_chart(fig3, use_container_width=True)
 
 # ======================================================
-# DATAFRAME
+# DATASET
 # ======================================================
 st.subheader("📋 Data Historis Café")
 
-st.dataframe(
-    df_simulasi,
-    use_container_width=True
-)
+st.dataframe(df, use_container_width=True)
 
 # ======================================================
 # CLASSIFICATION REPORT
@@ -420,5 +395,4 @@ st.text(
 # FOOTER
 # ======================================================
 st.markdown("---")
-
 st.caption("made with ❤️ by temennya fuad")
