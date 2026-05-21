@@ -26,7 +26,7 @@ st.title("☕ Cafe Analytics AI Indonesia")
 
 st.write("""
 Sistem Analisis & Prediksi Kepadatan Pengunjung Café
-Menggunakan Machine Learning Random Forest
+Menggunakan Artificial Intelligence Random Forest
 """)
 
 # ======================================================
@@ -117,7 +117,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# BULAN
+# NAMA BULAN
 # ======================================================
 nama_bulan = {
 
@@ -125,6 +125,15 @@ nama_bulan = {
     2: 'Februari',
     3: 'Maret',
     4: 'April'
+
+}
+
+hari_per_bulan = {
+
+    'Januari': 31,
+    'Februari': 28,
+    'Maret': 31,
+    'April': 30
 
 }
 
@@ -170,7 +179,7 @@ df_simulasi['Target_Ramai'] = (
 ).astype(int)
 
 # ======================================================
-# JUMLAH PENGUNJUNG
+# JUMLAH PENGUNJUNG REALISTIS
 # ======================================================
 jumlah_pengunjung = []
 
@@ -196,44 +205,48 @@ for i in range(n_data):
         'Hujan'
     ]
 
+    jam = df_simulasi.loc[
+        i,
+        'Jam_Operasional'
+    ]
+
+    # ==================================================
+    # PENGUNJUNG DASAR
+    # ==================================================
+    pengunjung = 40
+
+    # Hari ramai
     if ramai == 1:
 
-        pengunjung = np.random.randint(
-            80,
-            140
-        )
+        pengunjung += 40
 
-    else:
-
-        pengunjung = np.random.randint(
-            20,
-            70
-        )
-
-    # Promo menambah pengunjung
+    # Promo
     if promo == 1:
 
-        pengunjung += np.random.randint(
-            10,
-            25
-        )
+        pengunjung += 20
 
-    # Hari libur tambah pengunjung
+    # Hari libur
     if libur == 1:
 
-        pengunjung += np.random.randint(
-            15,
-            30
-        )
+        pengunjung += 30
 
-    # Hujan deras kurangi pengunjung
+    # Prime time sore
+    if jam == 2:
+
+        pengunjung += 25
+
+    # Hujan deras
     if hujan > 7:
 
-        pengunjung -= np.random.randint(
-            10,
-            25
-        )
+        pengunjung -= 25
 
+    # Noise kecil
+    pengunjung += np.random.randint(
+        -10,
+        10
+    )
+
+    # Minimal pengunjung
     pengunjung = max(
         pengunjung,
         15
@@ -248,19 +261,46 @@ df_simulasi[
 ] = jumlah_pengunjung
 
 # ======================================================
-# PENDAPATAN REALISTIS INDONESIA
+# PENDAPATAN REALISTIS
 # ======================================================
 pendapatan = []
 
-for pengunjung in df_simulasi[
-    'Jumlah_Pengunjung'
-]:
+for i in range(n_data):
 
-    # Rata-rata orang belanja
-    # 28rb - 45rb
-    rata_belanja = np.random.randint(
-        28000,
-        45000
+    pengunjung = df_simulasi.loc[
+        i,
+        'Jumlah_Pengunjung'
+    ]
+
+    promo = df_simulasi.loc[
+        i,
+        'Ada_Promo'
+    ]
+
+    libur = df_simulasi.loc[
+        i,
+        'Hari_Libur'
+    ]
+
+    # ==================================================
+    # RATA BELANJA
+    # ==================================================
+    rata_belanja = 35000
+
+    # Promo sedikit turunkan omzet per orang
+    if promo == 1:
+
+        rata_belanja -= 3000
+
+    # Hari libur orang lebih banyak beli
+    if libur == 1:
+
+        rata_belanja += 5000
+
+    # Noise harga kecil
+    rata_belanja += np.random.randint(
+        -3000,
+        3000
     )
 
     total = (
@@ -321,7 +361,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ======================================================
-# RANDOM FOREST
+# RANDOM FOREST MODEL
 # ======================================================
 model = RandomForestClassifier(
 
@@ -353,7 +393,7 @@ accuracy = accuracy_score(
 # ======================================================
 # AKURASI MODEL
 # ======================================================
-st.subheader("🎯 Akurasi Artificial Intelligence")
+st.subheader("🎯 Akurasi AI")
 
 st.success(
     f"""
@@ -470,7 +510,7 @@ analisis = st.button(
 )
 
 # ======================================================
-# HASIL PREDIKSI AI
+# HASIL ANALISIS AI
 # ======================================================
 if analisis:
 
@@ -494,6 +534,50 @@ if analisis:
 
     persen_ramai = probability[1] * 100
 
+    # ==================================================
+    # ESTIMASI PENGUNJUNG LEBIH REALISTIS
+    # ==================================================
+    estimasi_pengunjung = 40
+
+    if input_promo == 1:
+
+        estimasi_pengunjung += 30
+
+    if input_libur == 1:
+
+        estimasi_pengunjung += 40
+
+    if input_jam == 2:
+
+        estimasi_pengunjung += 25
+
+    if input_hujan > 7:
+
+        estimasi_pengunjung -= 20
+
+    estimasi_pengunjung = max(
+        estimasi_pengunjung,
+        15
+    )
+
+    # ==================================================
+    # ESTIMASI PENDAPATAN
+    # ==================================================
+    rata_belanja = 35000
+
+    if input_promo == 1:
+
+        rata_belanja -= 3000
+
+    if input_libur == 1:
+
+        rata_belanja += 5000
+
+    estimasi_pendapatan = (
+        estimasi_pengunjung *
+        rata_belanja
+    ) / 1000000
+
     st.markdown("---")
 
     st.subheader("🤖 Hasil Analisis AI")
@@ -502,21 +586,6 @@ if analisis:
     # RAMAI
     # ==================================================
     if prediction == 1:
-
-        estimasi_pengunjung = np.random.randint(
-            90,
-            160
-        )
-
-        rata_belanja = np.random.randint(
-            30000,
-            45000
-        )
-
-        estimasi_pendapatan = (
-            estimasi_pengunjung *
-            rata_belanja
-        ) / 1000000
 
         st.error(
             f"""
@@ -537,21 +606,6 @@ if analisis:
     # SEPI
     # ==================================================
     else:
-
-        estimasi_pengunjung = np.random.randint(
-            20,
-            70
-        )
-
-        rata_belanja = np.random.randint(
-            25000,
-            40000
-        )
-
-        estimasi_pendapatan = (
-            estimasi_pengunjung *
-            rata_belanja
-        ) / 1000000
 
         st.success(
             f"""
@@ -687,39 +741,69 @@ laporan_bulanan = df_simulasi.groupby(
 })
 
 # ======================================================
-# SORT BULAN
+# JUMLAH HARI
 # ======================================================
-laporan_bulanan = laporan_bulanan.sort_values(
-    by='No_Bulan'
+laporan_bulanan['Jumlah_Hari'] = (
+    laporan_bulanan['Bulan']
+    .map(hari_per_bulan)
 )
 
 # ======================================================
-# TAMBAHAN STATISTIK
+# RATA-RATA HARIAN
 # ======================================================
 laporan_bulanan[
     'Rata2_Pengunjung_Harian'
 ] = (
+
     laporan_bulanan[
         'Jumlah_Pengunjung'
-    ] / 30
+    ]
+
+    /
+
+    laporan_bulanan[
+        'Jumlah_Hari'
+    ]
+
 ).astype(int)
 
 laporan_bulanan[
     'Rata2_Pendapatan_Juta'
 ] = (
+
     laporan_bulanan[
         'Pendapatan_Juta'
-    ] / 30
+    ]
+
+    /
+
+    laporan_bulanan[
+        'Jumlah_Hari'
+    ]
+
 ).round(2)
 
+# ======================================================
+# PERSENTASE RAMAI
+# ======================================================
 laporan_bulanan[
     'Persentase_Ramai'
 ] = (
+
     (
+
         laporan_bulanan[
             'Target_Ramai'
-        ] / 30
+        ]
+
+        /
+
+        laporan_bulanan[
+            'Jumlah_Hari'
+        ]
+
     ) * 100
+
 ).round(1)
 
 # ======================================================
@@ -744,6 +828,8 @@ laporan_bulanan.columns = [
     'Total_Hari_Promo',
 
     'Total_Hari_Libur',
+
+    'Jumlah_Hari',
 
     'Rata2_Pengunjung_Harian',
 
@@ -775,7 +861,7 @@ laporan_bulanan[
 ].round(2)
 
 # ======================================================
-# TABS
+# TABS LAPORAN
 # ======================================================
 st.markdown("---")
 
@@ -801,6 +887,8 @@ with tab1:
         laporan_bulanan[[
 
             'Bulan',
+
+            'Jumlah_Hari',
 
             'Total_Pengunjung',
 
