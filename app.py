@@ -117,7 +117,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# BULAN
+# NAMA BULAN
 # ======================================================
 nama_bulan = {
 
@@ -125,15 +125,6 @@ nama_bulan = {
     2: 'Februari',
     3: 'Maret',
     4: 'April'
-
-}
-
-hari_per_bulan = {
-
-    'Januari': 31,
-    'Februari': 28,
-    'Maret': 31,
-    'April': 30
 
 }
 
@@ -248,9 +239,6 @@ for i in range(n_data):
         'Jam_Operasional'
     ]
 
-    # ==================================================
-    # RATA BELANJA
-    # ==================================================
     rata_belanja = 22000
 
     if libur == 1:
@@ -269,9 +257,6 @@ for i in range(n_data):
 
     total = pengunjung * rata_belanja
 
-    # ==================================================
-    # BATAS PENDAPATAN HARIAN
-    # ==================================================
     total = min(total, 1400000)
 
     pendapatan.append(total)
@@ -623,3 +608,149 @@ with g2:
         fig_cm,
         use_container_width=True
     )
+
+# ======================================================
+# LAPORAN STATISTIK BULANAN
+# ======================================================
+st.markdown("---")
+
+st.subheader("📈 Laporan Statistik Bulanan")
+
+laporan_bulanan = df_simulasi.groupby(
+    'Bulan',
+    sort=False
+).agg({
+
+    'Jumlah_Pengunjung': 'sum',
+    'Pendapatan_Harian': 'sum',
+    'Suhu': 'mean',
+    'Hujan': 'mean'
+
+}).reset_index()
+
+laporan_bulanan.columns = [
+
+    'Bulan',
+    'Total Pengunjung',
+    'Total Pendapatan',
+    'Rata-rata Suhu',
+    'Rata-rata Hujan'
+
+]
+
+laporan_bulanan[
+    'Total Pendapatan'
+] = (
+
+    laporan_bulanan[
+        'Total Pendapatan'
+    ] / 1000000
+
+).round(2)
+
+st.dataframe(
+
+    laporan_bulanan,
+
+    use_container_width=True,
+
+    hide_index=True
+
+)
+
+# ======================================================
+# GRAFIK PENDAPATAN BULANAN
+# ======================================================
+fig_income = px.bar(
+
+    laporan_bulanan,
+
+    x='Bulan',
+
+    y='Total Pendapatan',
+
+    text='Total Pendapatan',
+
+    title='💰 Pendapatan Bulanan Café (Juta Rupiah)'
+
+)
+
+st.plotly_chart(
+    fig_income,
+    use_container_width=True
+)
+
+# ======================================================
+# DETAIL DATA HARIAN
+# ======================================================
+st.markdown("---")
+
+st.subheader("📅 Detail Data Harian Café")
+
+bulan_pilih = st.selectbox(
+
+    "Pilih Bulan",
+
+    laporan_bulanan['Bulan']
+
+)
+
+detail_harian = df_simulasi[
+    df_simulasi['Bulan'] == bulan_pilih
+][[
+    'Tanggal',
+    'Suhu',
+    'Hujan',
+    'Hari_Libur',
+    'Ada_Promo',
+    'Jam_Operasional',
+    'Jumlah_Pengunjung',
+    'Pendapatan_Juta'
+]]
+
+detail_harian = detail_harian.rename(columns={
+
+    'Suhu': 'Suhu °C',
+    'Hujan': 'Hujan mm',
+    'Hari_Libur': 'Hari Libur',
+    'Ada_Promo': 'Promo',
+    'Jam_Operasional': 'Shift',
+    'Jumlah_Pengunjung': 'Pengunjung',
+    'Pendapatan_Juta': 'Pendapatan (Juta)'
+
+})
+
+st.dataframe(
+
+    detail_harian,
+
+    use_container_width=True,
+
+    hide_index=True
+
+)
+
+# ======================================================
+# CLASSIFICATION REPORT
+# ======================================================
+st.markdown("---")
+
+st.subheader("📄 Laporan Klasifikasi AI")
+
+st.text(
+
+    classification_report(
+        y_test,
+        y_pred
+    )
+
+)
+
+# ======================================================
+# FOOTER
+# ======================================================
+st.markdown("---")
+
+st.caption(
+    "made with ❤️ by temennya Rafi"
+)
