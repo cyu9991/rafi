@@ -66,7 +66,7 @@ except:
     live_rain = 0.0
 
 # ======================================================
-# DATASET SIMULASI
+# GENERATE DATASET
 # ======================================================
 np.random.seed(42)
 
@@ -107,7 +107,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# TARGET AI
+# TARGET RAMAI / SEPI
 # ======================================================
 df_simulasi['Target_Ramai'] = (
 
@@ -145,13 +145,41 @@ df_simulasi['Target_Ramai'] = np.where(
 )
 
 # ======================================================
-# DATA TANGGAL HARIAN
+# TANGGAL HARIAN
 # ======================================================
 df_simulasi['Tanggal'] = pd.date_range(
     start='2025-01-01',
     periods=n_data,
     freq='D'
 )
+
+# ======================================================
+# NAMA BULAN
+# ======================================================
+nama_bulan = {
+
+    1: 'Januari',
+    2: 'Februari',
+    3: 'Maret',
+    4: 'April',
+    5: 'Mei',
+    6: 'Juni',
+    7: 'Juli',
+    8: 'Agustus',
+    9: 'September',
+    10: 'Oktober',
+    11: 'November',
+    12: 'Desember'
+
+}
+
+df_simulasi['No_Bulan'] = df_simulasi[
+    'Tanggal'
+].dt.month
+
+df_simulasi['Bulan'] = df_simulasi[
+    'No_Bulan'
+].map(nama_bulan)
 
 # ======================================================
 # PENDAPATAN HARIAN
@@ -161,13 +189,6 @@ df_simulasi['Pendapatan_Harian'] = np.random.randint(
     5000000,
     n_data
 )
-
-# ======================================================
-# BULAN
-# ======================================================
-df_simulasi['Bulan'] = df_simulasi[
-    'Tanggal'
-].dt.strftime('%B')
 
 # ======================================================
 # FEATURE & TARGET
@@ -232,24 +253,20 @@ st.success(
 # ======================================================
 # INPUT USER
 # ======================================================
-st.subheader(
-    "📍 Input Parameter Kondisi Kafe"
-)
+st.subheader("📍 Input Parameter Kondisi Kafe")
 
 col1, col2, col3 = st.columns(3)
 
 # ======================================================
-# INPUT KOLOM 1
+# INPUT 1
 # ======================================================
 with col1:
 
     st.info(
         f"""
-        ⛅ Cuaca Live:
-        {live_temp} °C
-
-        🌧️ Hujan:
-        {live_rain} mm
+        🌡️ Suhu Live : {live_temp} °C
+        
+        🌧️ Hujan Live : {live_rain} mm
         """
     )
 
@@ -264,7 +281,7 @@ with col1:
     )
 
 # ======================================================
-# INPUT KOLOM 2
+# INPUT 2
 # ======================================================
 with col2:
 
@@ -278,7 +295,7 @@ with col2:
     )
 
     input_promo = st.selectbox(
-        "Program Promo",
+        "Promo Cafe",
         [0, 1],
         format_func=lambda x:
         "Tidak Ada Promo"
@@ -287,7 +304,7 @@ with col2:
     )
 
 # ======================================================
-# INPUT KOLOM 3
+# INPUT 3
 # ======================================================
 with col3:
 
@@ -320,24 +337,22 @@ prediction = model.predict(
     current_data
 )[0]
 
-st.subheader(
-    "🤖 Hasil Prediksi Pengunjung"
-)
+st.subheader("🤖 Hasil Prediksi")
 
 if prediction == 1:
 
     st.error("""
-    🔥 KAFE DIPREDIKSI RAMAI
+    🔥 AI Memprediksi Kafe Akan Ramai
 
     ✅ Tambah stok
     ✅ Tambah pegawai
-    ✅ Siapkan meja
+    ✅ Siapkan meja tambahan
     """)
 
 else:
 
     st.success("""
-    😌 KAFE DIPREDIKSI NORMAL
+    😌 AI Memprediksi Kafe Normal / Sepi
 
     ✅ Hemat operasional
     ✅ Fokus promosi
@@ -348,9 +363,7 @@ else:
 # ======================================================
 st.markdown("---")
 
-st.subheader(
-    "📊 Analisis Data Operasional Kafe"
-)
+st.subheader("📊 Analisis Operasional Kafe")
 
 g1, g2 = st.columns(2)
 
@@ -380,11 +393,17 @@ with g1:
     )
 
     fig_bar = px.bar(
+
         importance_df,
+
         x='Faktor Pengaruh',
+
         y='Tingkat Pengaruh',
+
         color='Tingkat Pengaruh',
+
         title='🔥 Faktor Paling Berpengaruh'
+
     )
 
     st.plotly_chart(
@@ -423,7 +442,7 @@ with g2:
     )
 
     fig_cm.update_layout(
-        title_text='🧠 Confusion Matrix'
+        title='🧠 Confusion Matrix'
     )
 
     st.plotly_chart(
@@ -435,24 +454,43 @@ with g2:
 # REKAP BULANAN
 # ======================================================
 laporan_bulanan = df_simulasi.groupby(
-    'Bulan',
+    ['No_Bulan', 'Bulan'],
     as_index=False
 ).agg({
 
     'Pendapatan_Harian': 'sum',
 
-    'Target_Ramai': 'sum'
+    'Target_Ramai': 'sum',
+
+    'Suhu': 'mean',
+
+    'Hujan': 'mean'
 
 })
+
+# ======================================================
+# SORT BULAN
+# ======================================================
+laporan_bulanan = laporan_bulanan.sort_values(
+    by='No_Bulan'
+)
 
 # ======================================================
 # UBAH NAMA KOLOM
 # ======================================================
 laporan_bulanan.columns = [
 
+    'No_Bulan',
+
     'Bulan',
+
     'Total_Pendapatan',
-    'Total_Hari_Ramai'
+
+    'Total_Hari_Ramai',
+
+    'Rata_Rata_Suhu',
+
+    'Rata_Rata_Hujan'
 
 ]
 
@@ -461,9 +499,7 @@ laporan_bulanan.columns = [
 # ======================================================
 st.markdown("---")
 
-st.subheader(
-    "📋 Laporan Statistik Bulanan"
-)
+st.subheader("📋 Laporan Statistik Bulanan")
 
 tab1, tab2, tab3 = st.tabs([
 
@@ -471,7 +507,7 @@ tab1, tab2, tab3 = st.tabs([
 
     "📈 Grafik Bulanan",
 
-    "📄 Laporan AI"
+    "📄 Detail Harian"
 
 ])
 
@@ -502,7 +538,7 @@ with tab2:
 
         text_auto=True,
 
-        title='💰 Pendapatan Café Per Bulan'
+        title='💰 Total Pendapatan Per Bulan'
 
     )
 
@@ -512,16 +548,87 @@ with tab2:
     )
 
 # ======================================================
-# TAB 3
+# TAB 3 DETAIL HARIAN
 # ======================================================
 with tab3:
 
-    st.text(
-        classification_report(
-            y_test,
-            y_pred
-        )
+    pilih_bulan = st.selectbox(
+
+        "Pilih Bulan",
+
+        laporan_bulanan['Bulan']
+
     )
+
+    # FILTER DATA
+    data_harian = df_simulasi[
+        df_simulasi['Bulan'] == pilih_bulan
+    ]
+
+    st.subheader(
+        f"📅 Data Harian Bulan {pilih_bulan}"
+    )
+
+    # TABEL DETAIL
+    st.dataframe(
+
+        data_harian[[
+
+            'Tanggal',
+
+            'Suhu',
+
+            'Hujan',
+
+            'Hari_Libur',
+
+            'Ada_Promo',
+
+            'Jam_Operasional',
+
+            'Pendapatan_Harian',
+
+            'Target_Ramai'
+
+        ]],
+
+        use_container_width=True
+
+    )
+
+    # GRAFIK HARIAN
+    fig_harian = px.line(
+
+        data_harian,
+
+        x='Tanggal',
+
+        y='Pendapatan_Harian',
+
+        markers=True,
+
+        title=f'📈 Pendapatan Harian Bulan {pilih_bulan}'
+
+    )
+
+    st.plotly_chart(
+        fig_harian,
+        use_container_width=True
+    )
+
+# ======================================================
+# LAPORAN AI
+# ======================================================
+st.markdown("---")
+
+st.subheader("📄 Laporan Klasifikasi AI")
+
+st.text(
+    classification_report(
+        y_test,
+        y_pred
+    )
+)
 
 # ======================================================
 # FOOTER
