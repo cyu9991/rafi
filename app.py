@@ -108,7 +108,7 @@ df_simulasi = pd.DataFrame({
         p=[0.7, 0.3]
     ),
 
-    'Jam_Operasional': np.random.choice(
+    'Shift': np.random.choice(
         [1, 2, 3],
         size=n_data,
         p=[0.3, 0.5, 0.2]
@@ -139,7 +139,7 @@ df_simulasi['Bulan'] = (
 )
 
 # ======================================================
-# TARGET RAMAI (LEBIH REALISTIS)
+# TARGET RAMAI
 # ======================================================
 score = []
 
@@ -153,7 +153,7 @@ for i in range(n_data):
     if df_simulasi.loc[i, 'Hari_Libur'] == 1:
         nilai += 25
 
-    if df_simulasi.loc[i, 'Jam_Operasional'] == 2:
+    if df_simulasi.loc[i, 'Shift'] == 2:
         nilai += 20
 
     if df_simulasi.loc[i, 'Hujan'] < 3:
@@ -162,7 +162,6 @@ for i in range(n_data):
     if 26 <= df_simulasi.loc[i, 'Suhu'] <= 30:
         nilai += 10
 
-    # Noise random
     nilai += np.random.randint(-40, 40)
 
     score.append(nilai)
@@ -188,7 +187,7 @@ for i in range(n_data):
 
     hujan = df_simulasi.loc[i, 'Hujan']
 
-    jam = df_simulasi.loc[i, 'Jam_Operasional']
+    shift = df_simulasi.loc[i, 'Shift']
 
     pengunjung = 20
 
@@ -201,7 +200,7 @@ for i in range(n_data):
     if libur == 1:
         pengunjung += 15
 
-    if jam == 2:
+    if shift == 2:
         pengunjung += 15
 
     if hujan > 7:
@@ -250,7 +249,9 @@ df_simulasi[
     'Pendapatan_Harian'
 ] = pendapatan
 
-# Format Rupiah
+# ======================================================
+# FORMAT RUPIAH
+# ======================================================
 df_simulasi['Pendapatan_Rp'] = (
     'Rp ' +
     df_simulasi['Pendapatan_Harian']
@@ -267,7 +268,7 @@ feature_cols = [
     'Hujan',
     'Hari_Libur',
     'Ada_Promo',
-    'Jam_Operasional'
+    'Shift'
 
 ]
 
@@ -387,15 +388,11 @@ with col2:
 
 with col3:
 
-    input_jam = st.selectbox(
-        "Jam Operasional",
+    input_shift = st.selectbox(
+        "Shift Operasional",
         [1, 2, 3],
         format_func=lambda x:
-        "Pagi"
-        if x == 1
-        else "Sore"
-        if x == 2
-        else "Malam"
+        f"Shift {x}"
     )
 
 # ======================================================
@@ -416,7 +413,7 @@ if analisis:
         input_hujan,
         input_libur,
         input_promo,
-        input_jam
+        input_shift
     ]], columns=feature_cols)
 
     prediction = model.predict(
@@ -439,7 +436,7 @@ if analisis:
     if input_libur == 1:
         estimasi_pengunjung += 15
 
-    if input_jam == 2:
+    if input_shift == 2:
         estimasi_pengunjung += 15
 
     if input_hujan > 7:
@@ -519,7 +516,7 @@ with g1:
             'Curah Hujan',
             'Hari Libur',
             'Promo',
-            'Jam Operasional'
+            'Shift'
 
         ],
 
@@ -641,6 +638,37 @@ st.dataframe(
 )
 
 # ======================================================
+# GRAFIK PENDAPATAN
+# ======================================================
+grafik_data = df_simulasi.groupby(
+    'Bulan',
+    sort=False
+)['Pendapatan_Harian'].sum().reset_index()
+
+grafik_data['Pendapatan_Juta'] = (
+    grafik_data['Pendapatan_Harian'] / 1000000
+).round(2)
+
+fig_income = px.bar(
+
+    grafik_data,
+
+    x='Bulan',
+
+    y='Pendapatan_Juta',
+
+    text='Pendapatan_Juta',
+
+    title='💰 Pendapatan Bulanan Café'
+
+)
+
+st.plotly_chart(
+    fig_income,
+    use_container_width=True
+)
+
+# ======================================================
 # DETAIL HARIAN
 # ======================================================
 st.markdown("---")
@@ -663,7 +691,7 @@ detail_harian = df_simulasi[
     'Hujan',
     'Hari_Libur',
     'Ada_Promo',
-    'Jam_Operasional',
+    'Shift',
     'Jumlah_Pengunjung',
     'Pendapatan_Rp'
 ]]
@@ -674,7 +702,7 @@ detail_harian = detail_harian.rename(columns={
     'Hujan': 'Hujan mm',
     'Hari_Libur': 'Hari Libur',
     'Ada_Promo': 'Promo',
-    'Jam_Operasional': 'Shift',
+    'Shift': 'Shift Kerja',
     'Jumlah_Pengunjung': 'Pengunjung',
     'Pendapatan_Rp': 'Pendapatan'
 
