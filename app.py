@@ -75,12 +75,20 @@ tanggal = pd.date_range(
 )
 
 df_simulasi = pd.DataFrame({
+
     'Tanggal': tanggal,
+
     'Suhu': np.random.randint(25, 34, n_data),
+
     'Hujan': np.random.randint(0, 11, n_data),
+
     'Hari_Libur': np.random.choice([0, 1], size=n_data, p=[0.75, 0.25]),
+
     'Ada_Promo': np.random.choice([0, 1], size=n_data, p=[0.7, 0.3]),
-    'Shift': np.random.choice([1, 2], size=n_data, p=[0.5, 0.5])  # 👈 FIX 2 SHIFT
+
+    # 🔥 FIX: hanya 2 shift
+    'Shift': np.random.choice([1, 2], size=n_data, p=[0.5, 0.5])
+
 })
 
 # ======================================================
@@ -102,6 +110,7 @@ df_simulasi['Bulan'] = df_simulasi['No_Bulan'].map(nama_bulan)
 score = []
 
 for i in range(n_data):
+
     nilai = 0
 
     if df_simulasi.loc[i, 'Ada_Promo'] == 1:
@@ -131,6 +140,7 @@ df_simulasi['Target_Ramai'] = (df_simulasi['Skor_Ramai'] >= 40).astype(int)
 jumlah_pengunjung = []
 
 for i in range(n_data):
+
     ramai = df_simulasi.loc[i, 'Target_Ramai']
     promo = df_simulasi.loc[i, 'Ada_Promo']
     libur = df_simulasi.loc[i, 'Hari_Libur']
@@ -163,6 +173,7 @@ df_simulasi['Jumlah_Pengunjung'] = jumlah_pengunjung
 pendapatan = []
 
 for i in range(n_data):
+
     pengunjung = df_simulasi.loc[i, 'Jumlah_Pengunjung']
     promo = df_simulasi.loc[i, 'Ada_Promo']
 
@@ -178,7 +189,7 @@ for i in range(n_data):
 df_simulasi['Pendapatan_Harian'] = pendapatan
 
 # ======================================================
-# FEATURE
+# MODEL
 # ======================================================
 feature_cols = ['Suhu', 'Hujan', 'Hari_Libur', 'Ada_Promo', 'Shift']
 
@@ -211,21 +222,25 @@ st.subheader("📍 Simulasi Kondisi Café")
 col1, col2, col3 = st.columns(3)
 
 with col1:
+    st.info(f"🌡️ Suhu Live : {live_temp} °C\n🌧️ Curah Hujan : {live_rain} mm")
+
     input_suhu = st.number_input("Input Suhu", 20, 40, live_temp)
-    input_hujan = st.number_input("Input Hujan", 0, 20, live_rain)
+    input_hujan = st.number_input("Input Curah Hujan", 0, 20, live_rain)
 
 with col2:
-    input_libur = st.selectbox("Hari", [0, 1],
-        format_func=lambda x: "Kerja" if x == 0 else "Libur")
+    input_libur = st.selectbox("Status Hari", [0, 1],
+        format_func=lambda x: "Hari Kerja" if x == 0 else "Hari Libur")
 
-    input_promo = st.selectbox("Promo", [0, 1],
-        format_func=lambda x: "Tidak" if x == 0 else "Ada")
+    input_promo = st.selectbox("Program Promo", [0, 1],
+        format_func=lambda x: "Tidak Ada Promo" if x == 0 else "Ada Promo")
 
 with col3:
-    input_shift = st.selectbox("Shift", [1, 2],
-        format_func=lambda x: f"Shift {x}")
+    input_shift = st.selectbox(
+        "Shift Operasional",
+        [1, 2]   # 🔥 FIX 2 SHIFT
+    )
 
-analisis = st.button("🔍 Analisis AI Sekarang")
+analisis = st.button("🔍 Analisis AI Sekarang", use_container_width=True)
 
 # ======================================================
 # HASIL
@@ -255,19 +270,20 @@ if analisis:
     st.subheader("🤖 Hasil Analisis")
 
     if prediction == 1:
-        st.error("🔥 Café RAMAI")
+        st.error("🔥 Café Diprediksi RAMAI")
     else:
-        st.success("😌 Café SEPI / Normal")
+        st.success("😌 Café Diprediksi SEPI / NORMAL")
 
 # ======================================================
-# SHIFT DETAIL (2 SHIFT)
+# DETAIL SHIFT (2 SHIFT)
 # ======================================================
-st.subheader("📅 Detail Shift")
+st.subheader("📅 Detail Data Harian")
 
 detail_shift = []
 
 for i in range(len(df_simulasi)):
-    for shift in [1, 2]:  # 👈 FIX
+
+    for shift in [1, 2]:   # 🔥 FIX 2 SHIFT
 
         pengunjung = np.random.randint(10, 40)
 
@@ -281,3 +297,14 @@ for i in range(len(df_simulasi)):
 df_detail_shift = pd.DataFrame(detail_shift)
 
 st.dataframe(df_detail_shift, use_container_width=True)
+
+# ======================================================
+# REPORT
+# ======================================================
+st.subheader("📄 Laporan Klasifikasi AI")
+st.text(classification_report(y_test, y_pred))
+
+# ======================================================
+# FOOTER
+# ======================================================
+st.caption("made with ❤️ by temennya Rafi")
