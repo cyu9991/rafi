@@ -26,7 +26,7 @@ st.title("☕ Cafe Analytics AI Indonesia")
 
 st.write("""
 Sistem Analisis & Prediksi Kepadatan Pengunjung
-Café Berbasis Artificial Intelligence
+Café Menggunakan Artificial Intelligence
 (Random Forest Machine Learning)
 """)
 
@@ -118,7 +118,7 @@ df_simulasi = pd.DataFrame({
 })
 
 # ======================================================
-# BULAN
+# NAMA BULAN
 # ======================================================
 nama_bulan = {
 
@@ -247,7 +247,7 @@ X_train, X_test, y_train, y_test = train_test_split(
 )
 
 # ======================================================
-# RANDOM FOREST MODEL
+# MODEL RANDOM FOREST
 # ======================================================
 model = RandomForestClassifier(
 
@@ -265,7 +265,7 @@ model.fit(
 )
 
 # ======================================================
-# PREDIKSI TEST
+# PREDIKSI
 # ======================================================
 y_pred = model.predict(
     X_test
@@ -298,7 +298,7 @@ st.subheader("📍 Simulasi Kondisi Café")
 col1, col2, col3 = st.columns(3)
 
 # ======================================================
-# INPUT KOLOM 1
+# INPUT 1
 # ======================================================
 with col1:
 
@@ -325,7 +325,7 @@ with col1:
     )
 
 # ======================================================
-# INPUT KOLOM 2
+# INPUT 2
 # ======================================================
 with col2:
 
@@ -348,7 +348,7 @@ with col2:
     )
 
 # ======================================================
-# INPUT KOLOM 3
+# INPUT 3
 # ======================================================
 with col3:
 
@@ -364,7 +364,7 @@ with col3:
     )
 
 # ======================================================
-# TOMBOL ANALISIS
+# BUTTON ANALISIS
 # ======================================================
 st.markdown("")
 
@@ -374,7 +374,7 @@ analisis = st.button(
 )
 
 # ======================================================
-# HASIL ANALISIS AI
+# HASIL AI
 # ======================================================
 if analisis:
 
@@ -403,7 +403,7 @@ if analisis:
     st.subheader("🤖 Hasil Analisis Artificial Intelligence")
 
     # ==================================================
-    # JIKA RAMAI
+    # RAMAI
     # ==================================================
     if prediction == 1:
 
@@ -446,11 +446,11 @@ if analisis:
         
         • Siapkan meja tambahan
         
-        • Aktifkan promo media sosial
+        • Aktifkan promosi digital
         """)
 
     # ==================================================
-    # JIKA SEPI
+    # SEPI
     # ==================================================
     else:
 
@@ -518,7 +518,7 @@ if analisis:
     )
 
 # ======================================================
-# VISUALISASI
+# DASHBOARD ANALITIK
 # ======================================================
 st.markdown("---")
 
@@ -610,7 +610,7 @@ with g2:
     )
 
 # ======================================================
-# REKAP BULANAN
+# LAPORAN BULANAN
 # ======================================================
 laporan_bulanan = df_simulasi.groupby(
     ['No_Bulan', 'Bulan'],
@@ -625,14 +625,53 @@ laporan_bulanan = df_simulasi.groupby(
 
     'Suhu': 'mean',
 
-    'Hujan': 'mean'
+    'Hujan': 'mean',
+
+    'Ada_Promo': 'sum',
+
+    'Hari_Libur': 'sum'
 
 })
 
+# ======================================================
+# URUTKAN BULAN
+# ======================================================
 laporan_bulanan = laporan_bulanan.sort_values(
     by='No_Bulan'
 )
 
+# ======================================================
+# TAMBAHAN STATISTIK
+# ======================================================
+laporan_bulanan[
+    'Rata2_Pengunjung_Harian'
+] = (
+    laporan_bulanan[
+        'Jumlah_Pengunjung'
+    ] / 30
+).astype(int)
+
+laporan_bulanan[
+    'Rata2_Pendapatan_Harian'
+] = (
+    laporan_bulanan[
+        'Pendapatan_Harian'
+    ] / 30
+).astype(int)
+
+laporan_bulanan[
+    'Persentase_Ramai'
+] = (
+    (
+        laporan_bulanan[
+            'Target_Ramai'
+        ] / 30
+    ) * 100
+).round(1)
+
+# ======================================================
+# UBAH NAMA KOLOM
+# ======================================================
 laporan_bulanan.columns = [
 
     'No_Bulan',
@@ -647,9 +686,34 @@ laporan_bulanan.columns = [
 
     'Rata_Rata_Suhu',
 
-    'Rata_Rata_Hujan'
+    'Rata_Rata_Hujan',
+
+    'Total_Hari_Promo',
+
+    'Total_Hari_Libur',
+
+    'Rata2_Pengunjung_Harian',
+
+    'Rata2_Pendapatan_Harian',
+
+    'Persentase_Ramai'
 
 ]
+
+# ======================================================
+# BULATKAN ANGKA
+# ======================================================
+laporan_bulanan[
+    'Rata_Rata_Suhu'
+] = laporan_bulanan[
+    'Rata_Rata_Suhu'
+].round(1)
+
+laporan_bulanan[
+    'Rata_Rata_Hujan'
+] = laporan_bulanan[
+    'Rata_Rata_Hujan'
+].round(1)
 
 # ======================================================
 # TABS LAPORAN
@@ -675,7 +739,31 @@ with tab1:
 
     st.dataframe(
 
-        laporan_bulanan.style.hide(axis="index"),
+        laporan_bulanan[[
+
+            'Bulan',
+
+            'Total_Pengunjung',
+
+            'Rata2_Pengunjung_Harian',
+
+            'Total_Pendapatan',
+
+            'Rata2_Pendapatan_Harian',
+
+            'Total_Hari_Ramai',
+
+            'Persentase_Ramai',
+
+            'Total_Hari_Promo',
+
+            'Total_Hari_Libur',
+
+            'Rata_Rata_Suhu',
+
+            'Rata_Rata_Hujan'
+
+        ]].style.hide(axis="index"),
 
         use_container_width=True
 
