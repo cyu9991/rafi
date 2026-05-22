@@ -601,4 +601,4 @@ st.text(classification_report(y_test, y_pred))
 # ======================================================
 st.markdown("---")
 
-st.caption("made with ❤️ by temennya Rafi")
+st.caption("made with by Rafi")
