@@ -25,10 +25,10 @@ st.set_page_config(
 # =========================================================
 # HEADER
 # =========================================================
-st.title("☕ Smart Café Analytics Pengunjung")
+st.title("☕ Smart Café Analytics AI Indonesia")
 
 st.markdown("""
-### Sistem Prediksi Kepadatan Pengunjung Cafe Hans
+### Sistem Prediksi Kepadatan Pengunjung Café Pinggir Jalan
 Menggunakan Artificial Intelligence Random Forest
 """)
 
@@ -629,21 +629,21 @@ with tab2:
         use_container_width=True
     )
 
-   shift_data = df.groupby(
-    'Shift'
-)['Jumlah_Pengunjung'].mean().reset_index()
+    shift_data = df.groupby(
+        'Shift'
+    )['Jumlah_Pengunjung'].mean().reset_index()
 
-fig_pie = px.pie(
+    fig_pie = px.pie(
 
-    shift_data,
+        shift_data,
 
-    names='Shift',
+        names='Shift',
 
-    values='Jumlah_Pengunjung',
+        values='Jumlah_Pengunjung',
 
-    title='🌙 Rata-rata Pengunjung per Shift'
+        title='🌙 Distribusi Pengunjung per Shift'
 
-)
+    )
 
     st.plotly_chart(
         fig_pie,
