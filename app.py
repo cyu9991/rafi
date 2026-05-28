@@ -629,21 +629,21 @@ with tab2:
         use_container_width=True
     )
 
-    shift_data = df.groupby(
-        'Shift'
-    )['Jumlah_Pengunjung'].sum().reset_index()
+   shift_data = df.groupby(
+    'Shift'
+)['Jumlah_Pengunjung'].mean().reset_index()
 
-    fig_pie = px.pie(
+fig_pie = px.pie(
 
-        shift_data,
+    shift_data,
 
-        names='Shift',
+    names='Shift',
 
-        values='Jumlah_Pengunjung',
+    values='Jumlah_Pengunjung',
 
-        title='🌙 Distribusi Pengunjung per Shift'
+    title='🌙 Rata-rata Pengunjung per Shift'
 
-    )
+)
 
     st.plotly_chart(
         fig_pie,
