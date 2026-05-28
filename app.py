@@ -211,9 +211,6 @@ for i in range(n_data):
     if df.loc[i, 'Shift'] == 2:
         nilai += 20
 
-    # ==========================================
-    # PENGARUH CUACA
-    # ==========================================
     cuaca = df.loc[i, 'Cuaca']
 
     if cuaca == 1:
@@ -265,9 +262,6 @@ for i in range(n_data):
     if df.loc[i, 'Shift'] == 3:
         total += 5
 
-    # ==========================================
-    # PENGARUH CUACA
-    # ==========================================
     cuaca = df.loc[i, 'Cuaca']
 
     if cuaca == 4:
@@ -555,13 +549,6 @@ with tab1:
             Rp {estimasi_pendapatan:,}
             """)
 
-            st.warning("""
-            📢 Rekomendasi AI:
-            - Tambahkan stok kopi
-            - Tambahkan pegawai
-            - Siapkan kursi tambahan
-            """)
-
         else:
 
             st.success(f"""
@@ -577,13 +564,6 @@ with tab1:
             Rp {estimasi_pendapatan:,}
             """)
 
-            st.info("""
-            📢 Rekomendasi AI:
-            - Gunakan promo diskon
-            - Fokus delivery
-            - Kurangi stok berlebih
-            """)
-
 # =========================================================
 # TAB DASHBOARD
 # =========================================================
@@ -591,9 +571,6 @@ with tab2:
 
     st.subheader("📊 Dashboard Analytics")
 
-    # ==========================================
-    # FEATURE IMPORTANCE
-    # ==========================================
     importance_df = pd.DataFrame({
 
         'Faktor': features,
@@ -621,9 +598,6 @@ with tab2:
         use_container_width=True
     )
 
-    # ==========================================
-    # PENDAPATAN BULANAN
-    # ==========================================
     pendapatan_bulanan = df.groupby(
         'Bulan',
         sort=False
@@ -655,9 +629,6 @@ with tab2:
         use_container_width=True
     )
 
-    # ==========================================
-    # PIE CHART SHIFT
-    # ==========================================
     shift_data = df.groupby(
         'Shift'
     )['Jumlah_Pengunjung'].sum().reset_index()
@@ -713,51 +684,6 @@ with tab3:
 
     )
 
-    st.markdown("---")
-
-    st.subheader("🔥 Simulasi Menu Terlaris")
-
-    menu_laris = pd.DataFrame({
-
-        'Menu': [
-
-            'Kopi Susu Gula Aren',
-            'Indomie Telur',
-            'Latte',
-            'Nasi Goreng',
-            'Kentang Goreng'
-
-        ],
-
-        'Terjual': [
-            120,
-            95,
-            80,
-            70,
-            60
-        ]
-
-    })
-
-    fig_menu = px.bar(
-
-        menu_laris,
-
-        x='Menu',
-
-        y='Terjual',
-
-        color='Terjual',
-
-        title='☕ Menu Paling Laris'
-
-    )
-
-    st.plotly_chart(
-        fig_menu,
-        use_container_width=True
-    )
-
 # =========================================================
 # TAB LAPORAN
 # =========================================================
@@ -772,9 +698,6 @@ with tab4:
         )
     )
 
-    # ==========================================
-    # CONFUSION MATRIX
-    # ==========================================
     cm = confusion_matrix(
         y_test,
         y_pred
@@ -803,9 +726,6 @@ with tab4:
         use_container_width=True
     )
 
-    # ==========================================
-    # DATASET
-    # ==========================================
     st.markdown("---")
 
     st.subheader("📅 Detail Dataset Café")
@@ -834,4 +754,3 @@ st.caption("""
 ☕ Smart Café Analytics AI Indonesia
 Made with ❤️ using Streamlit & Machine Learning
 """)
-```
