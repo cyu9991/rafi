@@ -25,17 +25,17 @@ st.set_page_config(
 # =========================================================
 # HEADER
 # =========================================================
-st.title("☕ Smart Café Analytics AI Indonesia")
+st.title("☕ Smart Café Analytics pengunjung")
 
 st.markdown("""
-### Sistem Prediksi Kepadatan Pengunjung Café Pinggir Jalan
+### Sistem Prediksi Kepadatan Pengunjung Cafe Hans
 Menggunakan Artificial Intelligence Random Forest
 """)
 
 # =========================================================
 # SIDEBAR
 # =========================================================
-st.sidebar.header("🧑‍🎓 Identitas Mahasiswa")
+st.sidebar.header(" Identitas Admin")
 
 st.sidebar.write("Nama : Isi Nama")
 st.sidebar.write("NIM : Isi NIM")
@@ -631,7 +631,7 @@ with tab2:
 
     shift_data = df.groupby(
         'Shift'
-    )['Jumlah_Pengunjung'].mean().reset_index()
+    )['Jumlah_Pengunjung'].mean().astype(int).reset_index()
 
     fig_pie = px.pie(
 
