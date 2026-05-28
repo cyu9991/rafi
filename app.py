@@ -631,7 +631,7 @@ with tab2:
 
     shift_data = df.groupby(
         'Shift'
-    )['Jumlah_Pengunjung'].mean().astype(int).reset_index()
+    )['Jumlah_Pengunjung'].sum().astype(int).reset_index()
 
     fig_pie = px.pie(
 
