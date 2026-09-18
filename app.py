@@ -297,6 +297,14 @@ def inject_css():
         border-color: var(--brown);
     }
 
+    div[data-testid="stTextInput"] input,
+    div[data-testid="stNumberInput"] input,
+    div[data-testid="stTextArea"] textarea,
+    div[data-testid="stDateInput"] input {
+        background: #FFFFFF !important;
+        color: var(--brown) !important;
+    }
+
     div[data-testid="stMetric"] {
         background: white;
         border: 1px solid var(--line);
@@ -309,22 +317,67 @@ def inject_css():
         overflow: hidden;
     }
 
-    .login-wrap {
-        max-width: 520px;
-        margin: 8vh auto 0;
-    }
-
     .login-logo {
         text-align: center;
         color: var(--brown);
         font-size: 34px;
         font-weight: 800;
+        margin-top: 7vh;
     }
 
     .login-desc {
         text-align: center;
         color: var(--muted);
         margin: 8px 0 24px;
+    }
+
+    /* Login form */
+    [data-testid="stForm"] {
+        background: #FFFFFF !important;
+        border: 1px solid var(--line) !important;
+        border-radius: 14px !important;
+        padding: 28px !important;
+        box-shadow: 0 8px 28px rgba(61,35,20,.08) !important;
+    }
+
+    [data-testid="stForm"] label {
+        color: var(--brown) !important;
+        font-weight: 600 !important;
+    }
+
+    [data-testid="stForm"] input {
+        background: #FFFFFF !important;
+        color: var(--brown) !important;
+        border: 1px solid #D9CEC5 !important;
+        border-radius: 9px !important;
+        min-height: 44px !important;
+    }
+
+    [data-testid="stForm"] input::placeholder {
+        color: #8B817A !important;
+        opacity: 1 !important;
+    }
+
+    [data-testid="stFormSubmitButton"] button {
+        background: var(--brown) !important;
+        border: 1px solid var(--brown) !important;
+        color: #FFFFFF !important;
+        border-radius: 9px !important;
+        font-weight: 700 !important;
+        min-height: 44px !important;
+    }
+
+    [data-testid="stFormSubmitButton"] button:hover {
+        background: var(--brown-dark) !important;
+        border-color: var(--brown-dark) !important;
+        color: #FFFFFF !important;
+    }
+
+    .login-hint {
+        text-align: center;
+        color: var(--muted);
+        font-size: 12px;
+        margin-top: 14px;
     }
 
     @media (max-width: 700px) {
@@ -356,45 +409,67 @@ for key, value in defaults.items():
 # LOGIN
 # =========================================================
 def login_page():
-    st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
     st.markdown('<div class="login-logo">🪵 KAYU</div>', unsafe_allow_html=True)
     st.markdown(
         '<div class="login-desc">Sistem Informasi Penjualan dan Pengelolaan Stok Kayu</div>',
         unsafe_allow_html=True
     )
 
-    with st.container(border=True):
-        st.markdown("### Masuk ke Sistem")
-        st.caption("Gunakan akun admin untuk mengakses dashboard.")
+    left, center, right = st.columns([1, 2, 1])
 
+    with center:
         with st.form("login_form", clear_on_submit=False):
-            username = st.text_input("Username", placeholder="Masukkan username")
-            password = st.text_input("Password", type="password", placeholder="Masukkan password")
-            submitted = st.form_submit_button("Masuk", type="primary", use_container_width=True)
+            st.markdown(
+                '<div style="font-size:20px;font-weight:800;color:#3D2314;margin-bottom:4px;">'
+                'Masuk ke Sistem</div>',
+                unsafe_allow_html=True
+            )
+            st.markdown(
+                '<div style="font-size:13px;color:#6F625A;margin-bottom:18px;">'
+                'Gunakan akun admin untuk mengakses dashboard.</div>',
+                unsafe_allow_html=True
+            )
 
-        if submitted:
-            if not username.strip() or not password:
-                st.error("Username dan password wajib diisi.")
-            else:
-                conn = get_db()
-                user = conn.execute("""
-                    SELECT * FROM users
-                    WHERE username = ? AND password = ?
-                """, (username.strip(), password)).fetchone()
-                conn.close()
+            username = st.text_input(
+                "Username",
+                placeholder="Masukkan username"
+            )
+            password = st.text_input(
+                "Password",
+                type="password",
+                placeholder="Masukkan password"
+            )
+            submitted = st.form_submit_button(
+                "Masuk",
+                type="primary",
+                use_container_width=True
+            )
 
-                if user:
-                    st.session_state.is_logged_in = True
-                    st.session_state.current_user_id = user["id_user"]
-                    st.session_state.current_user_name = user["nama"]
-                    st.session_state.page = "Dashboard"
-                    st.session_state.cart_items = []
-                    st.rerun()
+            if submitted:
+                if not username.strip() or not password:
+                    st.error("Username dan password wajib diisi.")
                 else:
-                    st.error("Username atau password salah.")
+                    conn = get_db()
+                    user = conn.execute("""
+                        SELECT * FROM users
+                        WHERE username = ? AND password = ?
+                    """, (username.strip(), password)).fetchone()
+                    conn.close()
 
-        st.info("Akun demo: **admin** / **admin123**")
-    st.markdown("</div>", unsafe_allow_html=True)
+                    if user:
+                        st.session_state.is_logged_in = True
+                        st.session_state.current_user_id = user["id_user"]
+                        st.session_state.current_user_name = user["nama"]
+                        st.session_state.page = "Dashboard"
+                        st.session_state.cart_items = []
+                        st.rerun()
+                    else:
+                        st.error("Username atau password salah.")
+
+        st.markdown(
+            '<div class="login-hint">Akun demo: <b>admin</b> / <b>admin123</b></div>',
+            unsafe_allow_html=True
+        )
 
 
 # =========================================================
