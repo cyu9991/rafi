@@ -3,7 +3,7 @@ import hmac
 import secrets
 import sqlite3
 from contextlib import contextmanager
-from datetime import datetime
+from datetime import datetime, timedelta
 
 import pandas as pd
 import streamlit as st
@@ -31,9 +31,10 @@ DAFTAR_MENU = [
     "Dashboard",
     "Data Kayu",
     "Stok Kayu",
-    "Pelanggan",
+    "Pembelian",
     "Penjualan",
     "Riwayat Transaksi",
+    "Pelanggan & Pemasok",
     "Laporan",
 ]
 
@@ -171,6 +172,53 @@ def init_db():
             )
         """)
 
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pemasok (
+                id_pemasok INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama_pemasok TEXT NOT NULL,
+                no_telepon TEXT,
+                alamat TEXT
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pembelian (
+                id_pembelian INTEGER PRIMARY KEY AUTOINCREMENT,
+                no_po TEXT UNIQUE NOT NULL,
+                tanggal TEXT NOT NULL,
+                id_pemasok INTEGER,
+                id_user INTEGER,
+                no_surat_jalan TEXT,
+                armada TEXT,
+                sopir TEXT,
+                metode_bayar TEXT NOT NULL,
+                total REAL NOT NULL DEFAULT 0,
+                FOREIGN KEY(id_pemasok)
+                    REFERENCES pemasok(id_pemasok)
+                    ON DELETE SET NULL,
+                FOREIGN KEY(id_user)
+                    REFERENCES users(id_user)
+                    ON DELETE SET NULL
+            )
+        """)
+
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS detail_pembelian (
+                id_detail INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_pembelian INTEGER NOT NULL,
+                id_kayu INTEGER NOT NULL,
+                jumlah INTEGER NOT NULL,
+                harga REAL NOT NULL,
+                subtotal REAL NOT NULL,
+                FOREIGN KEY(id_pembelian)
+                    REFERENCES pembelian(id_pembelian)
+                    ON DELETE CASCADE,
+                FOREIGN KEY(id_kayu)
+                    REFERENCES kayu(id_kayu)
+                    ON DELETE RESTRICT
+            )
+        """)
+
         # Akun admin default (password di-hash)
         conn.execute(
             "INSERT OR IGNORE INTO users (username, password, nama) "
@@ -245,6 +293,7 @@ DEFAULT_STATE = {
     "current_user_id": None,
     "current_user_name": None,
     "cart_items": [],
+    "purchase_items": [],
 }
 
 for _key, _value in DEFAULT_STATE.items():
@@ -326,6 +375,7 @@ def logout():
     st.session_state.current_user_id = None
     st.session_state.current_user_name = None
     st.session_state.cart_items = []
+    st.session_state.purchase_items = []
     st.session_state.pop("pending_page", None)
     st.session_state.pop("flash", None)
 
@@ -618,60 +668,60 @@ def halaman_stok():
 
 
 # =========================================================
-# PELANGGAN
+# PELANGGAN & PEMASOK
 # =========================================================
 
-def halaman_pelanggan():
-    st.title("👥 Data Pelanggan")
+def kelola_kontak(tabel, kol_id, kol_nama, tabel_transaksi, label):
+    """CRUD kontak. Dipakai bersama oleh Pelanggan dan Pemasok."""
 
     tab_data, tab_tambah = st.tabs(
-        ["📋 Data Pelanggan", "➕ Tambah Pelanggan"]
+        [f"📋 Data {label}", f"➕ Tambah {label}"]
     )
 
     with tab_data:
-        df = query_df("""
-            SELECT id_pelanggan AS 'ID',
-                   nama_pelanggan AS 'Nama Pelanggan',
+        kolom_nama = f"Nama {label}"
+
+        df = query_df(f"""
+            SELECT {kol_id} AS 'ID',
+                   {kol_nama} AS '{kolom_nama}',
                    no_telepon AS 'No. Telepon',
                    alamat AS 'Alamat'
-            FROM pelanggan
-            ORDER BY id_pelanggan DESC
+            FROM {tabel}
+            ORDER BY {kol_id} DESC
         """)
 
         if df.empty:
-            st.info("Belum ada data pelanggan.")
+            st.info(f"Belum ada data {label.lower()}.")
         else:
             st.dataframe(df, use_container_width=True, hide_index=True)
 
             st.divider()
-            st.subheader("✏️ Edit Pelanggan")
+            st.subheader(f"✏️ Edit {label}")
 
-            nama_map = dict(zip(df["ID"].tolist(), df["Nama Pelanggan"]))
+            nama_map = dict(zip(df["ID"].tolist(), df[kolom_nama]))
 
             pilihan_id = int(
                 st.selectbox(
-                    "Pilih pelanggan",
+                    f"Pilih {label.lower()}",
                     df["ID"].tolist(),
                     format_func=lambda x: f"ID {x} - {nama_map[x]}",
-                    key="select_edit_pelanggan",
+                    key=f"select_edit_{tabel}",
                 )
             )
 
             with db() as conn:
                 data = conn.execute(
-                    "SELECT * FROM pelanggan WHERE id_pelanggan = ?",
+                    f"SELECT * FROM {tabel} WHERE {kol_id} = ?",
                     (pilihan_id,),
                 ).fetchone()
                 jumlah_transaksi = conn.execute(
-                    "SELECT COUNT(*) AS n FROM penjualan "
-                    "WHERE id_pelanggan = ?",
+                    f"SELECT COUNT(*) AS n FROM {tabel_transaksi} "
+                    f"WHERE {kol_id} = ?",
                     (pilihan_id,),
                 ).fetchone()["n"]
 
-            with st.form(f"form_edit_pelanggan_{pilihan_id}"):
-                nama = st.text_input(
-                    "Nama Pelanggan", value=data["nama_pelanggan"]
-                )
+            with st.form(f"form_edit_{tabel}_{pilihan_id}"):
+                nama = st.text_input(f"Nama {label}", value=data[kol_nama])
                 telepon = st.text_input(
                     "No. Telepon", value=data["no_telepon"] or ""
                 )
@@ -682,13 +732,13 @@ def halaman_pelanggan():
 
             if simpan:
                 if not nama.strip():
-                    st.error("Nama pelanggan wajib diisi.")
+                    st.error(f"Nama {label.lower()} wajib diisi.")
                 else:
                     with db() as conn:
                         conn.execute(
-                            "UPDATE pelanggan SET nama_pelanggan = ?, "
-                            "no_telepon = ?, alamat = ? "
-                            "WHERE id_pelanggan = ?",
+                            f"UPDATE {tabel} SET {kol_nama} = ?, "
+                            f"no_telepon = ?, alamat = ? "
+                            f"WHERE {kol_id} = ?",
                             (
                                 nama.strip(),
                                 telepon.strip(),
@@ -696,60 +746,617 @@ def halaman_pelanggan():
                                 pilihan_id,
                             ),
                         )
-                    set_flash("Data pelanggan berhasil diperbarui.")
+                    set_flash(f"Data {label.lower()} berhasil diperbarui.")
                     st.rerun()
 
             st.divider()
-            st.subheader("🗑️ Hapus Pelanggan")
+            st.subheader(f"🗑️ Hapus {label}")
 
             if jumlah_transaksi > 0:
                 st.warning(
-                    f"Pelanggan ini memiliki {jumlah_transaksi} transaksi. "
-                    "Jika dihapus, transaksi tetap ada tetapi nama "
-                    "pelanggannya tampil sebagai '-'."
+                    f"{label} ini memiliki {jumlah_transaksi} transaksi. "
+                    f"Jika dihapus, transaksi tetap ada tetapi nama "
+                    f"{label.lower()}nya tampil sebagai '-'."
                 )
 
             yakin = st.checkbox(
-                "Saya yakin ingin menghapus pelanggan ini",
-                key=f"konfirmasi_hapus_pelanggan_{pilihan_id}",
+                f"Saya yakin ingin menghapus {label.lower()} ini",
+                key=f"konfirmasi_hapus_{tabel}_{pilihan_id}",
             )
 
             if st.button(
-                "🗑️ Hapus Pelanggan",
+                f"🗑️ Hapus {label}",
                 use_container_width=True,
                 disabled=not yakin,
-                key="button_hapus_pelanggan",
+                key=f"button_hapus_{tabel}",
             ):
                 with db() as conn:
                     conn.execute(
-                        "DELETE FROM pelanggan WHERE id_pelanggan = ?",
+                        f"DELETE FROM {tabel} WHERE {kol_id} = ?",
                         (pilihan_id,),
                     )
-                set_flash("Pelanggan berhasil dihapus.")
+                set_flash(f"{label} berhasil dihapus.")
                 st.rerun()
 
     with tab_tambah:
-        with st.form("form_tambah_pelanggan", clear_on_submit=True):
-            nama = st.text_input("Nama Pelanggan")
+        with st.form(f"form_tambah_{tabel}", clear_on_submit=True):
+            nama = st.text_input(f"Nama {label}")
             telepon = st.text_input("No. Telepon")
             alamat = st.text_area("Alamat")
             tambah = st.form_submit_button(
-                "➕ Tambahkan Pelanggan", use_container_width=True
+                f"➕ Tambahkan {label}", use_container_width=True
             )
 
         if tambah:
             if not nama.strip():
-                st.error("Nama pelanggan wajib diisi.")
+                st.error(f"Nama {label.lower()} wajib diisi.")
             else:
                 with db() as conn:
                     conn.execute(
-                        "INSERT INTO pelanggan "
-                        "(nama_pelanggan, no_telepon, alamat) "
-                        "VALUES (?, ?, ?)",
+                        f"INSERT INTO {tabel} "
+                        f"({kol_nama}, no_telepon, alamat) "
+                        f"VALUES (?, ?, ?)",
                         (nama.strip(), telepon.strip(), alamat.strip()),
                     )
-                set_flash("Pelanggan berhasil ditambahkan.")
+                set_flash(f"{label} berhasil ditambahkan.")
                 st.rerun()
+
+
+def halaman_pelanggan_pemasok():
+    st.title("👥 Pelanggan & Pemasok")
+
+    # Radio (bukan st.tabs) supaya bagian yang dipilih tidak
+    # kembali ke awal setelah st.rerun()
+    bagian = st.radio(
+        "Bagian",
+        ["Pelanggan", "Pemasok"],
+        horizontal=True,
+        label_visibility="collapsed",
+        key="bagian_kontak",
+    )
+
+    if bagian == "Pelanggan":
+        kelola_kontak(
+            "pelanggan", "id_pelanggan", "nama_pelanggan",
+            "penjualan", "Pelanggan",
+        )
+    else:
+        kelola_kontak(
+            "pemasok", "id_pemasok", "nama_pemasok",
+            "pembelian", "Pemasok",
+        )
+
+
+# =========================================================
+# PEMBELIAN
+# =========================================================
+
+METODE_BAYAR = ["Lunas / Tunai", "Tempo 30 Hari", "Transfer Bank"]
+
+PO_FIELDS = [
+    "po_pemasok", "po_no", "po_tanggal", "po_sj",
+    "po_armada", "po_sopir", "po_metode", "po_jumlah",
+]
+
+
+def nomor_po_berikutnya(tanggal):
+    """Buat nomor PO otomatis: PO-YYYY-MM-NNN."""
+    prefix = f"PO-{tanggal:%Y-%m}-"
+
+    with db() as conn:
+        n = conn.execute(
+            "SELECT COUNT(*) AS n FROM pembelian WHERE no_po LIKE ?",
+            (prefix + "%",),
+        ).fetchone()["n"] + 1
+
+        while conn.execute(
+            "SELECT 1 FROM pembelian WHERE no_po = ?",
+            (f"{prefix}{n:03d}",),
+        ).fetchone():
+            n += 1
+
+    return f"{prefix}{n:03d}"
+
+
+def simpan_pembelian(
+    no_po, tanggal, id_pemasok, no_sj, armada, sopir,
+    metode, items, total,
+):
+    """Simpan pembelian + tambah stok secara atomik."""
+    with db() as conn:
+        cursor = conn.execute(
+            "INSERT INTO pembelian "
+            "(no_po, tanggal, id_pemasok, id_user, no_surat_jalan, "
+            " armada, sopir, metode_bayar, total) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            (
+                no_po,
+                tanggal,
+                id_pemasok,
+                st.session_state.current_user_id,
+                no_sj,
+                armada,
+                sopir,
+                metode,
+                total,
+            ),
+        )
+        id_pembelian = cursor.lastrowid
+
+        for item in items:
+            conn.execute(
+                "INSERT INTO detail_pembelian "
+                "(id_pembelian, id_kayu, jumlah, harga, subtotal) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    id_pembelian,
+                    item["id_kayu"],
+                    item["jumlah"],
+                    item["harga"],
+                    item["subtotal"],
+                ),
+            )
+
+            hasil = conn.execute(
+                "UPDATE kayu SET stok = stok + ? WHERE id_kayu = ?",
+                (item["jumlah"], item["id_kayu"]),
+            )
+            if hasil.rowcount == 0:
+                raise ValueError(
+                    f"Kayu {item['nama_kayu']} tidak ditemukan."
+                )
+
+    return id_pembelian
+
+
+def ringkasan_pembelian():
+    sekarang = datetime.now()
+    bulan_ini = sekarang.strftime("%Y-%m")
+    bulan_lalu = (
+        sekarang.replace(day=1) - timedelta(days=1)
+    ).strftime("%Y-%m")
+
+    with db() as conn:
+        def total_bulan(bulan):
+            return conn.execute(
+                "SELECT COALESCE(SUM(total), 0) AS n FROM pembelian "
+                "WHERE strftime('%Y-%m', tanggal) = ?",
+                (bulan,),
+            ).fetchone()["n"]
+
+        total_ini = total_bulan(bulan_ini)
+        total_lalu = total_bulan(bulan_lalu)
+
+        unit_masuk = conn.execute(
+            "SELECT COALESCE(SUM(d.jumlah), 0) AS n "
+            "FROM detail_pembelian d "
+            "JOIN pembelian p ON d.id_pembelian = p.id_pembelian "
+            "WHERE strftime('%Y-%m', p.tanggal) = ?",
+            (bulan_ini,),
+        ).fetchone()["n"]
+
+        po_tempo = conn.execute(
+            "SELECT COUNT(*) AS n FROM pembelian "
+            "WHERE metode_bayar LIKE 'Tempo%'"
+        ).fetchone()["n"]
+
+        jumlah_pemasok = conn.execute(
+            "SELECT COUNT(*) AS n FROM pemasok"
+        ).fetchone()["n"]
+
+    delta = None
+    if total_lalu > 0:
+        delta = f"{(total_ini - total_lalu) / total_lalu * 100:+.1f}% dari bulan lalu"
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric(
+        "💰 Pembelian Bulan Ini",
+        rupiah(total_ini),
+        delta=delta,
+        delta_color="off",
+    )
+    c2.metric("📥 Unit Masuk Bulan Ini", unit_masuk)
+    c3.metric("🧾 PO Tempo", po_tempo)
+    c4.metric("🏭 Pemasok", jumlah_pemasok)
+
+
+def form_pembelian():
+    st.subheader("📝 Formulir Penerimaan Stok & Faktur")
+    st.caption(
+        "Pastikan spesifikasi kayu dan nota timbangan sesuai dengan "
+        "barang fisik. Stok bertambah otomatis setelah pembelian disimpan."
+    )
+
+    # Reset form setelah simpan (harus sebelum widget dibuat)
+    if st.session_state.pop("reset_pembelian", False):
+        for field in PO_FIELDS:
+            st.session_state.pop(field, None)
+
+    pemasok_df = query_df(
+        "SELECT id_pemasok, nama_pemasok FROM pemasok "
+        "ORDER BY nama_pemasok"
+    )
+    kayu_df = query_df(
+        "SELECT id_kayu, nama_kayu, satuan, stok FROM kayu "
+        "ORDER BY nama_kayu"
+    )
+
+    if pemasok_df.empty:
+        st.warning(
+            "Belum ada pemasok. Tambahkan dulu di menu "
+            "**Pelanggan & Pemasok**."
+        )
+        return
+
+    if kayu_df.empty:
+        st.warning(
+            "Belum ada data kayu. Tambahkan dulu di menu **Data Kayu**."
+        )
+        return
+
+    if "po_no" not in st.session_state:
+        st.session_state.po_no = nomor_po_berikutnya(datetime.now())
+
+    # ---------------- Info faktur ----------------
+    pemasok_map = dict(
+        zip(
+            pemasok_df["id_pemasok"].tolist(),
+            pemasok_df["nama_pemasok"],
+        )
+    )
+
+    c1, c2, c3 = st.columns(3)
+
+    id_pemasok = int(
+        c1.selectbox(
+            "Pemasok / HPH Sumber",
+            list(pemasok_map.keys()),
+            format_func=lambda x: pemasok_map[x],
+            key="po_pemasok",
+        )
+    )
+    no_po = c2.text_input("No. PO / Faktur", key="po_no")
+    tanggal = c3.date_input(
+        "Tanggal Pembelian", value=datetime.now().date(), key="po_tanggal"
+    )
+
+    with st.expander("🚚 Data Pengiriman (opsional)", expanded=True):
+        d1, d2, d3 = st.columns(3)
+        no_sj = d1.text_input("No. Surat Jalan", key="po_sj")
+        armada = d2.text_input("Armada & Plat Truk", key="po_armada")
+        sopir = d3.text_input("Sopir / PJ Bongkar", key="po_sopir")
+
+    # ---------------- Item ----------------
+    st.markdown("**Rincian Item Kayu Masuk**")
+
+    kayu_label = {
+        int(r.id_kayu): f"{r.nama_kayu} ({r.satuan}) | Stok: {r.stok}"
+        for r in kayu_df.itertuples()
+    }
+
+    i1, i2, i3 = st.columns([3, 2, 2])
+
+    id_kayu = int(
+        i1.selectbox(
+            "Pilih Kayu",
+            list(kayu_label.keys()),
+            format_func=lambda x: kayu_label[x],
+            key="po_kayu",
+        )
+    )
+    harga = i2.number_input(
+        "Harga Beli Satuan",
+        min_value=0,
+        value=0,
+        step=1000,
+        key=f"po_harga_{id_kayu}",
+    )
+    jumlah = i3.number_input(
+        "Jumlah", min_value=1, value=1, step=1, key="po_jumlah"
+    )
+
+    st.info(f"Subtotal: **{rupiah(harga * jumlah)}**")
+
+    st.caption(
+        "Jenis kayu baru belum ada di daftar? Tambahkan dulu di menu "
+        "**Data Kayu**."
+    )
+
+    if st.button(
+        "➕ Tambah Item Kayu",
+        use_container_width=True,
+        key="button_tambah_item_pembelian",
+    ):
+        if harga <= 0:
+            st.error("Harga beli harus lebih dari 0.")
+        else:
+            baris = kayu_df[kayu_df["id_kayu"] == id_kayu].iloc[0]
+            harga = float(harga)
+            jumlah = int(jumlah)
+
+            item = next(
+                (
+                    i for i in st.session_state.purchase_items
+                    if i["id_kayu"] == id_kayu and i["harga"] == harga
+                ),
+                None,
+            )
+
+            if item is None:
+                st.session_state.purchase_items.append({
+                    "id_kayu": id_kayu,
+                    "nama_kayu": baris["nama_kayu"],
+                    "satuan": baris["satuan"],
+                    "harga": harga,
+                    "jumlah": jumlah,
+                    "subtotal": harga * jumlah,
+                })
+            else:
+                item["jumlah"] += jumlah
+                item["subtotal"] = item["jumlah"] * harga
+
+            set_flash("Item ditambahkan ke daftar pembelian.")
+            st.rerun()
+
+    # ---------------- Daftar item ----------------
+    cart = st.session_state.purchase_items
+
+    if not cart:
+        st.info("Belum ada item kayu yang ditambahkan.")
+    else:
+        st.dataframe(
+            pd.DataFrame([
+                {
+                    "No": no,
+                    "Kayu": item["nama_kayu"],
+                    "Satuan": item["satuan"],
+                    "Harga Beli": rupiah(item["harga"]),
+                    "Jumlah": item["jumlah"],
+                    "Subtotal": rupiah(item["subtotal"]),
+                }
+                for no, item in enumerate(cart, start=1)
+            ]),
+            use_container_width=True,
+            hide_index=True,
+        )
+
+        pilihan_hapus = st.selectbox(
+            "Pilih item untuk dihapus",
+            range(len(cart)),
+            format_func=lambda x: (
+                f"{cart[x]['nama_kayu']} ({cart[x]['jumlah']})"
+            ),
+            key="select_hapus_item_pembelian",
+        )
+
+        if st.button(
+            "🗑️ Hapus Item",
+            use_container_width=True,
+            key="button_hapus_item_pembelian",
+        ):
+            cart.pop(pilihan_hapus)
+            set_flash("Item dihapus dari daftar pembelian.")
+            st.rerun()
+
+    st.divider()
+
+    # ---------------- Pembayaran & simpan ----------------
+    metode = st.radio(
+        "Skema Pembayaran",
+        METODE_BAYAR,
+        horizontal=True,
+        key="po_metode",
+    )
+
+    total = sum(item["subtotal"] for item in cart)
+    st.markdown(f"## 💰 Total Tagihan: {rupiah(total)}")
+
+    if st.button(
+        "💾 SIMPAN PEMBELIAN",
+        type="primary",
+        use_container_width=True,
+        disabled=not cart,
+        key="button_simpan_pembelian",
+    ):
+        if not no_po.strip():
+            st.error("No. PO / Faktur wajib diisi.")
+        else:
+            waktu = datetime.combine(
+                tanggal, datetime.now().time()
+            ).strftime("%Y-%m-%d %H:%M:%S")
+
+            try:
+                simpan_pembelian(
+                    no_po.strip(), waktu, id_pemasok,
+                    no_sj.strip(), armada.strip(), sopir.strip(),
+                    metode, cart, total,
+                )
+            except sqlite3.IntegrityError as error:
+                if "UNIQUE" in str(error).upper():
+                    st.error(
+                        "No. PO sudah dipakai. Gunakan nomor yang lain."
+                    )
+                else:
+                    st.error(
+                        "Pembelian gagal: data kayu atau pemasok "
+                        "tidak valid (mungkin sudah dihapus)."
+                    )
+            except Exception as error:
+                st.error(f"Pembelian gagal: {error}")
+            else:
+                st.session_state.purchase_items = []
+                st.session_state.reset_pembelian = True
+                set_flash(
+                    f"Pembelian {no_po.strip()} berhasil disimpan. "
+                    f"Stok kayu sudah diperbarui."
+                )
+                st.rerun()
+
+
+def tampilkan_detail_pembelian(id_pembelian):
+    with db() as conn:
+        beli = conn.execute(
+            """
+            SELECT b.*,
+                   COALESCE(s.nama_pemasok, '-') AS nama_pemasok,
+                   COALESCE(s.no_telepon, '-') AS telp_pemasok,
+                   COALESCE(u.nama, '-') AS nama_admin
+            FROM pembelian b
+            LEFT JOIN pemasok s ON b.id_pemasok = s.id_pemasok
+            LEFT JOIN users u ON b.id_user = u.id_user
+            WHERE b.id_pembelian = ?
+            """,
+            (id_pembelian,),
+        ).fetchone()
+
+        detail = conn.execute(
+            """
+            SELECT d.*, k.nama_kayu, k.satuan
+            FROM detail_pembelian d
+            JOIN kayu k ON d.id_kayu = k.id_kayu
+            WHERE d.id_pembelian = ?
+            ORDER BY d.id_detail
+            """,
+            (id_pembelian,),
+        ).fetchall()
+
+    if beli is None:
+        st.error("Data pembelian tidak ditemukan.")
+        return
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(f"**No. PO:** {beli['no_po']}")
+        st.write(f"**Tanggal:** {beli['tanggal']}")
+        st.write(f"**Pemasok:** {beli['nama_pemasok']}")
+
+    with col2:
+        st.write(f"**Pembayaran:** {beli['metode_bayar']}")
+        st.write(f"**No. Surat Jalan:** {beli['no_surat_jalan'] or '-'}")
+        st.write(
+            f"**Armada / Sopir:** {beli['armada'] or '-'} / "
+            f"{beli['sopir'] or '-'}"
+        )
+
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "Kayu": item["nama_kayu"],
+                "Satuan": item["satuan"],
+                "Jumlah": item["jumlah"],
+                "Harga Beli": rupiah(item["harga"]),
+                "Subtotal": rupiah(item["subtotal"]),
+            }
+            for item in detail
+        ]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.markdown(f"## 💰 Total: {rupiah(beli['total'])}")
+
+    garis = "=" * 40
+    strip = "-" * 40
+
+    bukti = [
+        garis,
+        "        BUKTI PEMBELIAN KAYU",
+        garis,
+        f"No. PO       : {beli['no_po']}",
+        f"Tanggal      : {beli['tanggal']}",
+        f"Pemasok      : {beli['nama_pemasok']}",
+        f"No. Telepon  : {beli['telp_pemasok']}",
+        f"Surat Jalan  : {beli['no_surat_jalan'] or '-'}",
+        f"Armada       : {beli['armada'] or '-'}",
+        f"Sopir        : {beli['sopir'] or '-'}",
+        f"Pembayaran   : {beli['metode_bayar']}",
+        strip,
+    ]
+
+    for item in detail:
+        bukti.append(
+            f"{item['nama_kayu']} ({item['jumlah']} {item['satuan']})"
+        )
+        bukti.append(
+            f"{rupiah(item['harga'])} x {item['jumlah']} = "
+            f"{rupiah(item['subtotal'])}"
+        )
+
+    bukti += [
+        strip,
+        f"TOTAL: {rupiah(beli['total'])}",
+        garis,
+        f"Admin: {beli['nama_admin']}",
+        garis,
+    ]
+
+    st.download_button(
+        "⬇️ Download Bukti Pembelian",
+        data="\n".join(bukti) + "\n",
+        file_name=f"bukti_{beli['no_po']}.txt",
+        mime="text/plain",
+        use_container_width=True,
+        key=f"button_download_bukti_{id_pembelian}",
+    )
+
+
+def daftar_pembelian():
+    st.subheader("📜 Daftar Pembelian Terakhir")
+
+    df = query_df("""
+        SELECT b.id_pembelian AS 'ID',
+               b.tanggal AS 'Tanggal',
+               b.no_po AS 'No. PO',
+               COALESCE(s.nama_pemasok, '-') AS 'Pemasok',
+               b.metode_bayar AS 'Pembayaran',
+               b.total AS 'Total'
+        FROM pembelian b
+        LEFT JOIN pemasok s ON b.id_pemasok = s.id_pemasok
+        ORDER BY b.id_pembelian DESC
+        LIMIT 50
+    """)
+
+    if df.empty:
+        st.info("Belum ada data pembelian.")
+        return
+
+    tabel = df.drop(columns="ID")
+    tabel["Total"] = tabel["Total"].apply(rupiah)
+    st.dataframe(tabel, use_container_width=True, hide_index=True)
+
+    label_map = {
+        int(i): f"{po} - {pemasok}"
+        for i, po, pemasok in zip(df["ID"], df["No. PO"], df["Pemasok"])
+    }
+
+    st.divider()
+    st.subheader("🧾 Detail Pembelian")
+
+    id_pembelian = int(
+        st.selectbox(
+            "Pilih pembelian",
+            list(label_map.keys()),
+            format_func=lambda x: label_map[x],
+            key="select_detail_pembelian",
+        )
+    )
+
+    tampilkan_detail_pembelian(id_pembelian)
+
+
+def halaman_pembelian():
+    st.title("🛍️ Pembelian Kayu")
+    st.caption(
+        "Catat transaksi pembelian dan pengadaan stok kayu dari "
+        "pemasok atau HPH resmi."
+    )
+
+    ringkasan_pembelian()
+    st.divider()
+    form_pembelian()
+    st.divider()
+    daftar_pembelian()
 
 
 # =========================================================
@@ -1163,8 +1770,8 @@ def tampilkan_detail_transaksi(id_transaksi):
 def halaman_laporan():
     st.title("📑 Laporan")
 
-    tab_penjualan, tab_stok = st.tabs(
-        ["💰 Laporan Penjualan", "📦 Laporan Stok"]
+    tab_penjualan, tab_stok, tab_pembelian = st.tabs(
+        ["💰 Laporan Penjualan", "📦 Laporan Stok", "🛍️ Laporan Pembelian"]
     )
 
     # ---------------- Laporan penjualan ----------------
@@ -1262,6 +1869,77 @@ def halaman_laporan():
             )
 
 
+    # ---------------- Laporan pembelian ----------------
+    with tab_pembelian:
+        st.subheader("🛍️ Laporan Pembelian")
+
+        df = query_df("""
+            SELECT b.id_pembelian AS 'ID Pembelian',
+                   b.tanggal AS 'Tanggal',
+                   b.no_po AS 'No. PO',
+                   COALESCE(s.nama_pemasok, '-') AS 'Pemasok',
+                   b.metode_bayar AS 'Pembayaran',
+                   b.total AS 'Total'
+            FROM pembelian b
+            LEFT JOIN pemasok s ON b.id_pemasok = s.id_pemasok
+            ORDER BY b.id_pembelian DESC
+        """)
+
+        if df.empty:
+            st.info("Belum ada data pembelian.")
+        else:
+            df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+
+            tgl_min = df["Tanggal"].min().date()
+            tgl_max = df["Tanggal"].max().date()
+
+            # key memuat tanggal agar default ikut berubah saat ada data baru
+            awal = st.date_input(
+                "Tanggal Awal",
+                value=tgl_min,
+                key=f"lap_beli_awal_{tgl_min}",
+            )
+            akhir = st.date_input(
+                "Tanggal Akhir",
+                value=tgl_max,
+                key=f"lap_beli_akhir_{tgl_max}",
+            )
+
+            if awal > akhir:
+                st.error(
+                    "Tanggal awal tidak boleh lebih besar dari "
+                    "tanggal akhir."
+                )
+            else:
+                hasil = df[
+                    (df["Tanggal"].dt.date >= awal)
+                    & (df["Tanggal"].dt.date <= akhir)
+                ].copy()
+
+                hasil["Tanggal"] = hasil["Tanggal"].dt.strftime(
+                    "%d-%m-%Y %H:%M"
+                )
+
+                c1, c2 = st.columns(2)
+                c1.metric("Jumlah Pembelian", len(hasil))
+                c2.metric("Total Pembelian", rupiah(hasil["Total"].sum()))
+
+                tampil = hasil.copy()
+                tampil["Total"] = tampil["Total"].apply(rupiah)
+                st.dataframe(
+                    tampil, use_container_width=True, hide_index=True
+                )
+
+                st.download_button(
+                    "⬇️ Download Laporan Pembelian",
+                    data=hasil.to_csv(index=False).encode("utf-8"),
+                    file_name="laporan_pembelian.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="button_download_laporan_pembelian",
+                )
+
+
 # =========================================================
 # MAIN PROGRAM
 # =========================================================
@@ -1272,9 +1950,10 @@ HALAMAN = {
     "Dashboard": halaman_dashboard,
     "Data Kayu": halaman_data_kayu,
     "Stok Kayu": halaman_stok,
-    "Pelanggan": halaman_pelanggan,
+    "Pembelian": halaman_pembelian,
     "Penjualan": halaman_penjualan,
     "Riwayat Transaksi": halaman_riwayat,
+    "Pelanggan & Pemasok": halaman_pelanggan_pemasok,
     "Laporan": halaman_laporan,
 }
 
