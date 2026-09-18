@@ -1,12 +1,17 @@
-import streamlit as st
+import hashlib
+import hmac
+import secrets
 import sqlite3
+from contextlib import contextmanager
+from datetime import datetime
+
 import pandas as pd
-from datetime import datetime, date, timedelta
-import html
+import streamlit as st
 
 # =========================================================
-# CONFIG
+# KONFIGURASI
 # =========================================================
+
 st.set_page_config(
     page_title="Sistem Informasi Penjualan Kayu",
     page_icon="🪵",
@@ -16,9 +21,66 @@ st.set_page_config(
 
 DB_NAME = "kayu.db"
 
+# Ambang batas status stok (dipakai di semua halaman)
+STOK_SANGAT_RENDAH = 5
+STOK_RENDAH = 10
+
+DAFTAR_SATUAN = ["Batang", "Kubik", "Papan", "Balok", "Lembar"]
+
+DAFTAR_MENU = [
+    "Dashboard",
+    "Data Kayu",
+    "Stok Kayu",
+    "Pelanggan",
+    "Penjualan",
+    "Riwayat Transaksi",
+    "Laporan",
+]
+
+st.markdown(
+    """
+    <style>
+    .main { padding-top: 1rem; }
+    [data-testid="stMetric"] {
+        border: 1px solid rgba(128,128,128,0.25);
+        border-radius: 10px;
+        padding: 12px;
+    }
+    .stButton > button { border-radius: 8px; }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
+
+
+# =========================================================
+# KEAMANAN PASSWORD
+# =========================================================
+
+def hash_password(password, salt=None):
+    """Hash password dengan PBKDF2-SHA256. Format: pbkdf2$salt$hash"""
+    salt = salt or secrets.token_hex(16)
+    digest = hashlib.pbkdf2_hmac(
+        "sha256",
+        password.encode("utf-8"),
+        bytes.fromhex(salt),
+        200_000,
+    )
+    return f"pbkdf2${salt}${digest.hex()}"
+
+
+def verify_password(password, stored):
+    try:
+        _, salt, _ = stored.split("$")
+    except ValueError:
+        return False
+    return hmac.compare_digest(hash_password(password, salt), stored)
+
+
 # =========================================================
 # DATABASE
 # =========================================================
+
 def get_db():
     conn = sqlite3.connect(DB_NAME, check_same_thread=False)
     conn.row_factory = sqlite3.Row
@@ -26,566 +88,1199 @@ def get_db():
     return conn
 
 
+@contextmanager
+def db():
+    """Koneksi otomatis commit / rollback / close."""
+    conn = get_db()
+    try:
+        yield conn
+        conn.commit()
+    except Exception:
+        conn.rollback()
+        raise
+    finally:
+        conn.close()
+
+
+def query_df(sql, params=()):
+    with db() as conn:
+        return pd.read_sql_query(sql, conn, params=params)
+
+
+@st.cache_resource
 def init_db():
-    conn = get_db()
-    cur = conn.cursor()
+    with db() as conn:
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS users (
+                id_user INTEGER PRIMARY KEY AUTOINCREMENT,
+                username TEXT UNIQUE NOT NULL,
+                password TEXT NOT NULL,
+                nama TEXT NOT NULL
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS users (
-            id_user INTEGER PRIMARY KEY AUTOINCREMENT,
-            username TEXT UNIQUE NOT NULL,
-            password TEXT NOT NULL,
-            nama TEXT NOT NULL
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS kayu (
+                id_kayu INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama_kayu TEXT NOT NULL,
+                satuan TEXT NOT NULL,
+                harga REAL NOT NULL,
+                stok INTEGER NOT NULL DEFAULT 0
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS kayu (
-            id_kayu INTEGER PRIMARY KEY AUTOINCREMENT,
-            nama_kayu TEXT NOT NULL,
-            satuan TEXT NOT NULL,
-            harga REAL NOT NULL,
-            stok INTEGER NOT NULL DEFAULT 0
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS pelanggan (
+                id_pelanggan INTEGER PRIMARY KEY AUTOINCREMENT,
+                nama_pelanggan TEXT NOT NULL,
+                no_telepon TEXT,
+                alamat TEXT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS pelanggan (
-            id_pelanggan INTEGER PRIMARY KEY AUTOINCREMENT,
-            nama_pelanggan TEXT NOT NULL,
-            no_telepon TEXT,
-            alamat TEXT
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS penjualan (
+                id_penjualan INTEGER PRIMARY KEY AUTOINCREMENT,
+                tanggal TEXT NOT NULL,
+                id_pelanggan INTEGER,
+                id_user INTEGER,
+                total REAL NOT NULL DEFAULT 0,
+                FOREIGN KEY(id_pelanggan)
+                    REFERENCES pelanggan(id_pelanggan)
+                    ON DELETE SET NULL,
+                FOREIGN KEY(id_user)
+                    REFERENCES users(id_user)
+                    ON DELETE SET NULL
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS penjualan (
-            id_penjualan INTEGER PRIMARY KEY AUTOINCREMENT,
-            tanggal TEXT NOT NULL,
-            id_pelanggan INTEGER,
-            id_user INTEGER,
-            total REAL NOT NULL,
-            FOREIGN KEY (id_pelanggan) REFERENCES pelanggan(id_pelanggan) ON DELETE SET NULL,
-            FOREIGN KEY (id_user) REFERENCES users(id_user) ON DELETE SET NULL
-        )
-    """)
+        conn.execute("""
+            CREATE TABLE IF NOT EXISTS detail_penjualan (
+                id_detail INTEGER PRIMARY KEY AUTOINCREMENT,
+                id_penjualan INTEGER NOT NULL,
+                id_kayu INTEGER NOT NULL,
+                jumlah INTEGER NOT NULL,
+                harga REAL NOT NULL,
+                subtotal REAL NOT NULL,
+                FOREIGN KEY(id_penjualan)
+                    REFERENCES penjualan(id_penjualan)
+                    ON DELETE CASCADE,
+                FOREIGN KEY(id_kayu)
+                    REFERENCES kayu(id_kayu)
+                    ON DELETE RESTRICT
+            )
+        """)
 
-    cur.execute("""
-        CREATE TABLE IF NOT EXISTS detail_penjualan (
-            id_detail INTEGER PRIMARY KEY AUTOINCREMENT,
-            id_penjualan INTEGER NOT NULL,
-            id_kayu INTEGER NOT NULL,
-            jumlah INTEGER NOT NULL,
-            harga REAL NOT NULL,
-            subtotal REAL NOT NULL,
-            FOREIGN KEY (id_penjualan) REFERENCES penjualan(id_penjualan) ON DELETE CASCADE,
-            FOREIGN KEY (id_kayu) REFERENCES kayu(id_kayu) ON DELETE RESTRICT
-        )
-    """)
-
-    if cur.execute("SELECT COUNT(*) FROM users").fetchone()[0] == 0:
-        cur.execute(
-            "INSERT INTO users (username, password, nama) VALUES (?, ?, ?)",
-            ("admin", "admin123", "Administrator"),
-        )
-
-    if cur.execute("SELECT COUNT(*) FROM kayu").fetchone()[0] == 0:
-        cur.executemany(
-            "INSERT INTO kayu (nama_kayu, satuan, harga, stok) VALUES (?, ?, ?, ?)",
-            [
-                ("Kayu Jati", "Batang", 150000, 50),
-                ("Kayu Meranti", "Batang", 100000, 40),
-                ("Kayu Sengon", "Batang", 75000, 60),
-                ("Kayu Mahoni", "Batang", 120000, 35),
-                ("Kayu Ulin", "Batang", 200000, 25),
-            ],
+        # Akun admin default (password di-hash)
+        conn.execute(
+            "INSERT OR IGNORE INTO users (username, password, nama) "
+            "VALUES (?, ?, ?)",
+            ("admin", hash_password("admin123"), "Administrator"),
         )
 
-    conn.commit()
-    conn.close()
+        # Migrasi: hash password lama yang masih teks biasa
+        for user in conn.execute(
+            "SELECT id_user, password FROM users"
+        ).fetchall():
+            if not user["password"].startswith("pbkdf2$"):
+                conn.execute(
+                    "UPDATE users SET password = ? WHERE id_user = ?",
+                    (hash_password(user["password"]), user["id_user"]),
+                )
 
+        jumlah_kayu = conn.execute(
+            "SELECT COUNT(*) AS jumlah FROM kayu"
+        ).fetchone()["jumlah"]
 
-def qdf(sql, params=()):
-    conn = get_db()
-    df = pd.read_sql_query(sql, conn, params=params)
-    conn.close()
-    return df
+        if jumlah_kayu == 0:
+            conn.executemany(
+                "INSERT INTO kayu (nama_kayu, satuan, harga, stok) "
+                "VALUES (?, ?, ?, ?)",
+                [
+                    ("Kayu Jati", "Batang", 150000, 50),
+                    ("Kayu Meranti", "Batang", 100000, 40),
+                    ("Kayu Sengon", "Batang", 75000, 60),
+                    ("Kayu Mahoni", "Batang", 120000, 35),
+                    ("Kayu Ulin", "Batang", 200000, 25),
+                ],
+            )
 
+    return True
 
-def execute(sql, params=()):
-    conn = get_db()
-    cur = conn.cursor()
-    cur.execute(sql, params)
-    conn.commit()
-    result = cur.lastrowid
-    conn.close()
-    return result
-
-
-def rupiah(value):
-    return "Rp {:,.0f}".format(float(value)).replace(",", ".")
-
-
-def esc(value):
-    return html.escape("" if value is None else str(value))
 
 # =========================================================
-# SESSION
+# UTILITAS
 # =========================================================
-if "is_logged_in" not in st.session_state:
-    st.session_state.is_logged_in = False
-if "current_user_id" not in st.session_state:
-    st.session_state.current_user_id = None
-if "current_user_name" not in st.session_state:
-    st.session_state.current_user_name = None
-if "current_page" not in st.session_state:
-    st.session_state.current_page = "Dashboard"
-if "cart_items" not in st.session_state:
-    st.session_state.cart_items = []
+
+def rupiah(nilai):
+    return "Rp {:,.0f}".format(float(nilai)).replace(",", ".")
+
+
+def status_stok(nilai, emoji=True):
+    if nilai <= STOK_SANGAT_RENDAH:
+        return "🔴 Sangat Rendah" if emoji else "Sangat Rendah"
+    if nilai <= STOK_RENDAH:
+        return "🟠 Rendah" if emoji else "Rendah"
+    return "🟢 Aman" if emoji else "Aman"
+
+
+def set_flash(pesan, level="success"):
+    """Simpan pesan agar tetap tampil setelah st.rerun()."""
+    st.session_state.flash = (level, pesan)
+
+
+def show_flash():
+    flash = st.session_state.pop("flash", None)
+    if flash:
+        level, pesan = flash
+        getattr(st, level)(pesan)
+
 
 # =========================================================
-# DESIGN SYSTEM - mengikuti HTML UI asli
+# SESSION STATE
 # =========================================================
-st.markdown("""
-<style>
-@import url('https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap');
-@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700&display=swap');
 
-:root{
- --primary:#250f03;
- --primary-container:#3d2314;
- --secondary:#904d00;
- --secondary-container:#fe932c;
- --surface:#f9f9ff;
- --surface-low:#f0f3ff;
- --surface-lowest:#ffffff;
- --surface-high:#dee8ff;
- --surface-container:#e7eeff;
- --on-surface:#111c2d;
- --on-variant:#50443f;
- --outline:#82746e;
- --outline-variant:#d4c3bc;
- --error:#ba1a1a;
+DEFAULT_STATE = {
+    "is_logged_in": False,
+    "current_user_id": None,
+    "current_user_name": None,
+    "cart_items": [],
 }
-html,body,[class*="css"]{font-family:'Plus Jakarta Sans',sans-serif;}
-.stApp{background:var(--surface);color:var(--on-surface);}
-#MainMenu,footer{visibility:hidden;}
-header[data-testid="stHeader"]{background:rgba(249,249,255,.92);}
-section[data-testid="stSidebar"]{background:var(--primary-container);}
-section[data-testid="stSidebar"] > div{background:var(--primary-container);}
-section[data-testid="stSidebar"] *{color:#fff;}
-section[data-testid="stSidebar"] .stButton > button{
- width:100%; text-align:left; justify-content:flex-start; border:0;
- background:transparent; color:#d4c3bc; border-radius:9px;
- padding:12px 16px; margin:2px 0; font-weight:600;
-}
-section[data-testid="stSidebar"] .stButton > button:hover{
- background:#250f02; color:#fff;
-}
-.sidebar-brand{padding:4px 8px 22px;border-bottom:1px solid rgba(212,195,188,.22);margin-bottom:18px;}
-.sidebar-logo{display:flex;gap:10px;align-items:center;}
-.sidebar-icon{width:40px;height:40px;border-radius:9px;background:#fe932c;color:#2d1608;display:flex;align-items:center;justify-content:center;font-size:22px;}
-.sidebar-name{font-size:16px;font-weight:700;letter-spacing:.04em;}
-.sidebar-sub{font-size:10px;color:#af8874!important;text-transform:uppercase;letter-spacing:.12em;}
-.sidebar-version{font-size:10px;color:#af8874!important;margin-top:20px;padding:0 10px;}
-.page-wrap{padding:8px 8px 35px;}
-.topbar{display:flex;justify-content:space-between;align-items:center;background:rgba(255,255,255,.92);padding:10px 20px;border-radius:12px;box-shadow:0 1px 8px rgba(0,0,0,.04);margin-bottom:22px;}
-.breadcrumb{font-size:12px;color:var(--on-variant);display:flex;align-items:center;gap:7px;}
-.userbox{display:flex;align-items:center;gap:10px;}
-.usertext{text-align:right;line-height:1.2;}.usertext b{font-size:12px;}.usertext span{font-size:10px;color:#82746e;}
-.avatar{width:34px;height:34px;border-radius:50%;background:#250f03;color:#fff;display:flex;align-items:center;justify-content:center;font-size:17px;}
-.page-head{display:flex;justify-content:space-between;align-items:flex-start;gap:18px;margin-bottom:22px;}
-.page-head h1{font-size:28px;line-height:36px;margin:0;font-weight:700;letter-spacing:-.02em;}
-.page-head p{font-size:13px;color:var(--on-variant);margin:4px 0 0;}
-.card{background:#fff;border-radius:12px;padding:20px;box-shadow:0 1px 8px rgba(0,0,0,.04);}
-.card-title{font-size:16px;font-weight:700;margin-bottom:4px;}.card-sub{font-size:12px;color:#82746e;}
-.metric{background:#fff;border-radius:12px;padding:17px;min-height:110px;box-shadow:0 1px 8px rgba(0,0,0,.04);display:flex;justify-content:space-between;align-items:center;}
-.metric-label{font-size:10px;color:#50443f;text-transform:uppercase;letter-spacing:.08em;font-weight:700;}.metric-value{font-size:27px;font-weight:700;margin-top:5px;}.metric-unit{font-size:11px;color:#82746e;margin-left:4px;}.metric-icon{width:46px;height:46px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-size:23px;}
-.icon-orange{background:#fe932c;color:#2d1608}.icon-cream{background:#ffdbca;color:#2d1608}.icon-soft{background:#fff0e4;color:#904d00}.icon-brown{background:#ffdbc7;color:#3d2314}
-.section-head{display:flex;justify-content:space-between;align-items:center;margin:24px 0 12px;}.section-head h2{font-size:17px;margin:0;font-weight:700;}.muted{color:#82746e;font-size:12px;}
-.html-table{width:100%;border-collapse:separate;border-spacing:0;background:#fff;border-radius:12px;overflow:hidden;box-shadow:0 1px 8px rgba(0,0,0,.04);font-size:12px;}.html-table th{background:#f0f3ff;color:#50443f;text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.06em;padding:12px 14px;border-bottom:1px solid #d4c3bc;}.html-table td{padding:13px 14px;border-bottom:1px solid #eee8e3;}.html-table tr:last-child td{border-bottom:0;}.html-table tr:hover td{background:#faf8f6;}
-.badge{display:inline-block;border-radius:999px;padding:4px 9px;font-size:10px;font-weight:700;}.badge-green{background:#e8f5e9;color:#2e7d32}.badge-orange{background:#fff1df;color:#a65300}.badge-red{background:#ffebee;color:#ba1a1a}.badge-brown{background:#ffdbca;color:#5e402f}
-.alert{padding:14px 16px;border-radius:10px;background:#eef6ff;color:#2485df;font-size:13px;}.notice{padding:14px 16px;border-radius:10px;background:#fff4e8;color:#8b4e00;font-size:13px;}
-.chart{height:245px;display:flex;align-items:flex-end;gap:13px;padding:20px 10px 8px;border-bottom:1px solid #d4c3bc;}.bar-wrap{flex:1;height:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;gap:6px;}.bar{width:min(42px,75%);background:#3d2314;border-radius:6px 6px 0 0;min-height:4px;}.bar.today{background:#fe932c;}.bar-label{font-size:10px;color:#82746e;}.bar-value{font-size:10px;color:#904d00;font-weight:700;}
-.footer-note{background:#f0f3ff;padding:12px 16px;border-radius:0 0 12px 12px;font-size:11px;color:#50443f;display:flex;justify-content:space-between;}
-.login-card{max-width:470px;margin:55px auto;background:#fff;border-radius:18px;padding:34px;box-shadow:0 12px 35px rgba(37,15,3,.10);border:1px solid #e7ddd6;}.login-logo{width:62px;height:62px;border-radius:16px;background:#fe932c;margin:0 auto 18px;display:flex;align-items:center;justify-content:center;font-size:33px;}.login-card h1{text-align:center;font-size:25px;margin:0;font-weight:700;}.login-card p{text-align:center;color:#82746e;font-size:12px;margin:6px 0 25px;}
-.stTextInput input,.stNumberInput input,.stDateInput input,.stSelectbox div[data-baseweb="select"]>div,.stTextArea textarea{border-radius:8px!important;border-color:#d4c3bc!important;background:#fff!important;}
-.stButton > button{border-radius:8px;font-weight:700;}
-.primary-btn .stButton>button{background:#250f03;color:#fff;border-color:#250f03;}
-.small-help{font-size:11px;color:#82746e;}
-@media(max-width:900px){.page-head{flex-direction:column}.topbar{display:none}.metric{min-height:95px}}
-</style>
-""", unsafe_allow_html=True)
+
+for _key, _value in DEFAULT_STATE.items():
+    if _key not in st.session_state:
+        st.session_state[_key] = _value
+
 
 # =========================================================
 # LOGIN
 # =========================================================
-def login_page():
-    st.markdown("""
-    <div class="login-card">
-      <div class="login-logo">🪵</div>
-      <h1>Sistem Informasi Penjualan Kayu</h1>
-      <p>Penjualan dan Pengelolaan Stok Kayu Berbasis Web</p>
-    </div>
-    """, unsafe_allow_html=True)
 
-    left, center, right = st.columns([1, 2, 1])
-    with center:
-        with st.form("login_form"):
-            st.markdown("### 🔐 Login Admin")
-            username = st.text_input("Username", placeholder="Masukkan username")
-            password = st.text_input("Password", type="password", placeholder="Masukkan password")
-            masuk = st.form_submit_button("Masuk", use_container_width=True)
+def halaman_login():
+    st.markdown(
+        """
+        <style>
+        .login-title {
+            text-align: center; font-size: 36px;
+            font-weight: bold; margin-top: 70px;
+        }
+        .login-subtitle {
+            text-align: center; color: #666; margin-bottom: 30px;
+        }
+        </style>
+        <div class="login-title">🪵 Sistem Informasi Penjualan Kayu</div>
+        <div class="login-subtitle">
+            Penjualan dan Pengelolaan Stok Kayu Berbasis Web
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-            if masuk:
-                if not username.strip() or not password:
-                    st.error("Username dan password wajib diisi.")
-                else:
-                    conn = get_db()
+    _, col2, _ = st.columns([1, 2, 1])
+
+    with col2:
+        with st.form("form_login_admin"):
+            st.subheader("🔐 Login Admin")
+
+            username = st.text_input(
+                "Username", placeholder="Masukkan username"
+            )
+            password = st.text_input(
+                "Password", type="password",
+                placeholder="Masukkan password",
+            )
+
+            tombol_login = st.form_submit_button(
+                "🔑 Login", use_container_width=True
+            )
+
+        if tombol_login:
+            if not username.strip():
+                st.error("Username wajib diisi.")
+            elif not password:
+                st.error("Password wajib diisi.")
+            else:
+                with db() as conn:
                     user = conn.execute(
-                        "SELECT * FROM users WHERE username=? AND password=?",
-                        (username.strip(), password),
+                        "SELECT * FROM users WHERE username = ?",
+                        (username.strip(),),
                     ).fetchone()
-                    conn.close()
-                    if user:
-                        st.session_state.is_logged_in = True
-                        st.session_state.current_user_id = user["id_user"]
-                        st.session_state.current_user_name = user["nama"]
-                        st.session_state.current_page = "Dashboard"
-                        st.rerun()
-                    else:
-                        st.error("Username atau password salah.")
+
+                if user and verify_password(password, user["password"]):
+                    st.session_state.is_logged_in = True
+                    st.session_state.current_user_id = user["id_user"]
+                    st.session_state.current_user_name = user["nama"]
+                    st.rerun()
+                else:
+                    st.error("Username atau password salah.")
 
         st.info("Login demo: **admin** / **admin123**")
+
 
 # =========================================================
 # SIDEBAR
 # =========================================================
-def sidebar():
+
+def logout():
+    st.session_state.is_logged_in = False
+    st.session_state.current_user_id = None
+    st.session_state.current_user_name = None
+    st.session_state.cart_items = []
+    st.session_state.pop("pending_page", None)
+    st.session_state.pop("flash", None)
+
+
+def tampilkan_sidebar():
+    # Pindah halaman terjadwal (harus diterapkan sebelum radio dibuat)
+    if "pending_page" in st.session_state:
+        st.session_state.navigation_menu = st.session_state.pop(
+            "pending_page"
+        )
+
     with st.sidebar:
-        st.markdown("""
-        <div class="sidebar-brand">
-          <div class="sidebar-logo">
-            <div class="sidebar-icon">🌲</div>
-            <div><div class="sidebar-name">KAYU</div><div class="sidebar-sub">Sistem Informasi</div></div>
-          </div>
-        </div>
-        """, unsafe_allow_html=True)
-
-        menus = [
-            ("Dashboard", "▦"),
-            ("Barang", "▤"),
-            ("Pembelian", "🛍"),
-            ("Penjualan", "▣"),
-            ("Pelanggan & Pemasok", "♧"),
-            ("Laporan", "▥"),
-        ]
-        for label, icon in menus:
-            if st.button(f"{icon}   {label}", key="nav_" + label, use_container_width=True):
-                st.session_state.current_page = label
-                st.rerun()
-
-        st.markdown("<div class='sidebar-version'>⚙ Pengaturan<br><br>v1.2.0 • Timber ERP</div>", unsafe_allow_html=True)
+        st.markdown("# 🪵 Sistem Kayu")
+        st.caption("Penjualan dan Pengelolaan Stok Kayu")
         st.divider()
-        st.caption(f"👤 {st.session_state.current_user_name}")
-        if st.button("Keluar", use_container_width=True):
-            st.session_state.is_logged_in = False
-            st.session_state.current_user_id = None
-            st.session_state.current_user_name = None
-            st.session_state.cart_items = []
-            st.rerun()
+        st.write(f"👤 **{st.session_state.current_user_name}**")
+        st.divider()
 
+        menu = st.radio(
+            "MENU UTAMA", DAFTAR_MENU, key="navigation_menu"
+        )
 
-def topbar():
-    st.markdown(f"""
-    <div class="topbar">
-      <div class="breadcrumb">▣ <span>Gudang Utama Jati Mulya</span> › <b>Operasional Kayu</b></div>
-      <div class="userbox"><div class="usertext"><b>{esc(st.session_state.current_user_name)}</b><br><span>Administrator</span></div><div class="avatar">♟</div></div>
-    </div>
-    """, unsafe_allow_html=True)
+        st.divider()
+        st.button(
+            "🚪 Logout",
+            use_container_width=True,
+            on_click=logout,
+            key="button_logout",
+        )
 
+    return menu
 
-def page_head(title, desc):
-    st.markdown(f"""
-    <div class="page-head"><div><h1>{esc(title)}</h1><p>{esc(desc)}</p></div></div>
-    """, unsafe_allow_html=True)
 
 # =========================================================
 # DASHBOARD
 # =========================================================
-def dashboard():
-    page_head("Dashboard", f"Selamat datang, {st.session_state.current_user_name}. Berikut ringkasan data sistem penjualan dan stok kayu.")
 
-    kayu = qdf("SELECT * FROM kayu")
-    pelanggan = qdf("SELECT * FROM pelanggan")
-    penjualan = qdf("SELECT * FROM penjualan")
-    total_stok = int(kayu.stok.sum()) if not kayu.empty else 0
-    total_transaksi = len(penjualan)
-    total_nilai = float(penjualan.total.sum()) if not penjualan.empty else 0
+def halaman_dashboard():
+    st.title("📊 Dashboard")
+    st.write(f"Selamat datang, **{st.session_state.current_user_name}**.")
 
-    cols = st.columns(4)
-    metrics = [
-        ("Total Barang", len(kayu), "Jenis kayu", "🌲", "icon-cream"),
-        ("Total Stok", total_stok, "Unit", "▤", "icon-cream"),
-        ("Total Penjualan", total_transaksi, "Transaksi", "🛒", "icon-soft"),
-        ("Nilai Penjualan", rupiah(total_nilai), "Total", "💰", "icon-brown"),
-    ]
-    for col, (label, value, unit, icon, iclass) in zip(cols, metrics):
-        with col:
-            st.markdown(f"""
-            <div class="metric"><div><div class="metric-label">{label}</div><div class="metric-value">{value} <span class="metric-unit">{unit}</span></div></div><div class="metric-icon {iclass}">{icon}</div></div>
-            """, unsafe_allow_html=True)
+    with db() as conn:
+        jumlah_kayu = conn.execute(
+            "SELECT COUNT(*) AS n FROM kayu"
+        ).fetchone()["n"]
+        total_stok = conn.execute(
+            "SELECT COALESCE(SUM(stok), 0) AS n FROM kayu"
+        ).fetchone()["n"]
+        jumlah_pelanggan = conn.execute(
+            "SELECT COUNT(*) AS n FROM pelanggan"
+        ).fetchone()["n"]
+        jumlah_transaksi = conn.execute(
+            "SELECT COUNT(*) AS n FROM penjualan"
+        ).fetchone()["n"]
+        total_penjualan = conn.execute(
+            "SELECT COALESCE(SUM(total), 0) AS n FROM penjualan"
+        ).fetchone()["n"]
 
-    c1, c2 = st.columns([1.7, 1])
-    with c1:
-        st.markdown("<div class='section-head'><div><h2>Grafik Penjualan</h2><span class='muted'>Aktivitas 7 Hari Terakhir</span></div></div>", unsafe_allow_html=True)
-        rows = []
-        today = date.today()
-        for i in range(6, -1, -1):
-            d = today - timedelta(days=i)
-            n = int(qdf("SELECT COUNT(*) AS n FROM penjualan WHERE date(tanggal)=?", (d.isoformat(),)).iloc[0]["n"])
-            rows.append((d, n))
-        max_n = max([x[1] for x in rows] + [1])
-        bars = "".join([f"<div class='bar-wrap'><div class='bar-value'>{n}</div><div class='bar {'today' if d==today else ''}' style='height:{max(4, int((n/max_n)*180))}px'></div><div class='bar-label'>{d.strftime('%d %b')}</div></div>" for d,n in rows])
-        st.markdown(f"<div class='card'><div class='chart'>{bars}</div><div class='footer-note'><span>↗ Rata-rata {sum(x[1] for x in rows)/7:.1f} transaksi/hari</span><span>Data berdasarkan transaksi tersimpan</span></div></div>", unsafe_allow_html=True)
+    c1, c2, c3, c4, c5 = st.columns(5)
+    c1.metric("🪵 Jenis Kayu", jumlah_kayu)
+    c2.metric("📦 Total Stok", total_stok)
+    c3.metric("👥 Pelanggan", jumlah_pelanggan)
+    c4.metric("🧾 Transaksi", jumlah_transaksi)
+    c5.metric("💰 Penjualan", rupiah(total_penjualan))
 
-    with c2:
-        st.markdown("<div class='section-head'><div><h2>Stok Terendah</h2><span class='muted'>Perlu diperhatikan</span></div></div>", unsafe_allow_html=True)
-        low = kayu.sort_values("stok").head(6)
-        if low.empty:
-            st.markdown("<div class='alert'>Belum ada data stok.</div>", unsafe_allow_html=True)
+    st.divider()
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.subheader("📦 Kondisi Stok")
+
+        df_stok = query_df("""
+            SELECT nama_kayu AS 'Nama Kayu', satuan AS 'Satuan',
+                   stok AS 'Stok', harga AS 'Harga'
+            FROM kayu
+            ORDER BY stok ASC
+        """)
+
+        if df_stok.empty:
+            st.info("Belum ada data kayu.")
         else:
-            content = ""
-            for _, r in low.iterrows():
-                cls = "badge-red" if r.stok <= 5 else ("badge-orange" if r.stok <= 10 else "badge-green")
-                status = "Sangat Rendah" if r.stok <= 5 else ("Rendah" if r.stok <= 10 else "Aman")
-                content += f"<div style='display:flex;justify-content:space-between;align-items:center;padding:11px 0;border-bottom:1px solid #eee8e3'><span><b>{esc(r.nama_kayu)}</b><br><small class='muted'>{int(r.stok)} {esc(r.satuan)}</small></span><span class='badge {cls}'>{status}</span></div>"
-            st.markdown(f"<div class='card'>{content}</div>", unsafe_allow_html=True)
+            df_stok["Harga"] = df_stok["Harga"].apply(rupiah)
+            st.dataframe(
+                df_stok, use_container_width=True, hide_index=True
+            )
 
-    st.markdown("<div class='section-head'><div><h2>Transaksi Terbaru</h2><span class='muted'>5 transaksi terakhir</span></div></div>", unsafe_allow_html=True)
-    recent = qdf("""
-        SELECT p.id_penjualan, p.tanggal, COALESCE(pl.nama_pelanggan,'Umum') pelanggan, p.total
-        FROM penjualan p LEFT JOIN pelanggan pl ON p.id_pelanggan=pl.id_pelanggan
-        ORDER BY p.id_penjualan DESC LIMIT 5
-    """)
-    if recent.empty:
-        st.markdown("<div class='alert'>Belum ada transaksi.</div>", unsafe_allow_html=True)
-    else:
-        body = "".join([f"<tr><td>#{int(r.id_penjualan)}</td><td>{esc(r.tanggal)}</td><td>{esc(r.pelanggan)}</td><td><b>{rupiah(r.total)}</b></td></tr>" for _,r in recent.iterrows()])
-        st.markdown(f"<table class='html-table'><thead><tr><th>ID</th><th>Tanggal</th><th>Pelanggan</th><th>Total</th></tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)
+    with col2:
+        st.subheader("🧾 Transaksi Terbaru")
+
+        df_transaksi = query_df("""
+            SELECT p.id_penjualan AS 'ID Transaksi',
+                   p.tanggal AS 'Tanggal',
+                   COALESCE(pl.nama_pelanggan, '-') AS 'Pelanggan',
+                   p.total AS 'Total'
+            FROM penjualan p
+            LEFT JOIN pelanggan pl ON p.id_pelanggan = pl.id_pelanggan
+            ORDER BY p.id_penjualan DESC
+            LIMIT 5
+        """)
+
+        if df_transaksi.empty:
+            st.info("Belum ada transaksi.")
+        else:
+            df_transaksi["Total"] = df_transaksi["Total"].apply(rupiah)
+            st.dataframe(
+                df_transaksi, use_container_width=True, hide_index=True
+            )
+
 
 # =========================================================
-# BARANG
+# DATA KAYU
 # =========================================================
-def barang():
-    page_head("Barang", "Kelola data barang kayu, harga, satuan, dan stok.")
-    df = qdf("SELECT * FROM kayu ORDER BY id_kayu DESC")
-    search = st.text_input("Cari barang", placeholder="Cari nama kayu...")
-    if search:
-        df = df[df.nama_kayu.str.contains(search, case=False, na=False)]
 
-    st.markdown("<div class='section-head'><div><h2>Daftar Barang</h2><span class='muted'>Data barang terhubung langsung dengan database SQLite</span></div></div>", unsafe_allow_html=True)
-    body = "".join([f"<tr><td>{int(r.id_kayu)}</td><td><b>{esc(r.nama_kayu)}</b></td><td>{esc(r.satuan)}</td><td>{rupiah(r.harga)}</td><td>{int(r.stok)}</td></tr>" for _,r in df.iterrows()])
-    if body:
-        st.markdown(f"<table class='html-table'><thead><tr><th>ID</th><th>Nama Barang</th><th>Satuan</th><th>Harga</th><th>Stok</th></tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)
-    else:
-        st.markdown("<div class='alert'>Tidak ada data yang sesuai pencarian.</div>", unsafe_allow_html=True)
+def halaman_data_kayu():
+    st.title("🪵 Data Kayu")
 
-    with st.expander("+ Tambah Barang"):
-        with st.form("add_barang"):
-            c1,c2 = st.columns(2)
-            with c1:
-                nama = st.text_input("Nama Barang")
-                satuan = st.selectbox("Satuan", ["Batang","Kubik","Papan","Balok","Lembar"])
-            with c2:
-                harga = st.number_input("Harga", min_value=0.0, step=1000.0)
-                stok = st.number_input("Stok", min_value=0, step=1)
-            submit = st.form_submit_button("Simpan Data", use_container_width=True)
-            if submit:
+    tab_data, tab_tambah = st.tabs(["📋 Data Kayu", "➕ Tambah Kayu"])
+
+    with tab_data:
+        df = query_df("""
+            SELECT id_kayu AS 'ID', nama_kayu AS 'Nama Kayu',
+                   satuan AS 'Satuan', harga AS 'Harga', stok AS 'Stok'
+            FROM kayu
+            ORDER BY id_kayu DESC
+        """)
+
+        if df.empty:
+            st.info("Belum ada data kayu.")
+        else:
+            tabel = df.copy()
+            tabel["Harga"] = tabel["Harga"].apply(rupiah)
+            st.dataframe(tabel, use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.subheader("✏️ Edit Data Kayu")
+
+            nama_map = dict(zip(df["ID"].tolist(), df["Nama Kayu"]))
+
+            pilihan_id = int(
+                st.selectbox(
+                    "Pilih kayu",
+                    df["ID"].tolist(),
+                    format_func=lambda x: f"ID {x} - {nama_map[x]}",
+                    key="select_edit_kayu",
+                )
+            )
+
+            with db() as conn:
+                data = conn.execute(
+                    "SELECT * FROM kayu WHERE id_kayu = ?", (pilihan_id,)
+                ).fetchone()
+
+            with st.form(f"form_edit_kayu_{pilihan_id}"):
+                nama = st.text_input("Nama Kayu", value=data["nama_kayu"])
+
+                index_satuan = (
+                    DAFTAR_SATUAN.index(data["satuan"])
+                    if data["satuan"] in DAFTAR_SATUAN
+                    else 0
+                )
+                satuan = st.selectbox(
+                    "Satuan", DAFTAR_SATUAN, index=index_satuan
+                )
+                harga = st.number_input(
+                    "Harga", min_value=0,
+                    value=int(data["harga"]), step=1000,
+                )
+                stok = st.number_input(
+                    "Stok", min_value=0,
+                    value=int(data["stok"]), step=1,
+                )
+                simpan = st.form_submit_button(
+                    "💾 Simpan Perubahan", use_container_width=True
+                )
+
+            if simpan:
                 if not nama.strip():
-                    st.error("Nama barang wajib diisi.")
+                    st.error("Nama kayu wajib diisi.")
+                elif harga <= 0:
+                    st.error("Harga harus lebih dari 0.")
                 else:
-                    execute("INSERT INTO kayu (nama_kayu,satuan,harga,stok) VALUES (?,?,?,?)", (nama.strip(),satuan,harga,stok))
-                    st.success("Data barang berhasil ditambahkan.")
+                    with db() as conn:
+                        conn.execute(
+                            "UPDATE kayu SET nama_kayu = ?, satuan = ?, "
+                            "harga = ?, stok = ? WHERE id_kayu = ?",
+                            (nama.strip(), satuan, harga, stok, pilihan_id),
+                        )
+                    set_flash("Data kayu berhasil diperbarui.")
                     st.rerun()
 
-    if not df.empty:
-        with st.expander("Edit / Hapus Barang"):
-            selected = st.selectbox("Pilih barang", df.id_kayu.tolist(), format_func=lambda x: df.loc[df.id_kayu==x,"nama_kayu"].iloc[0])
-            r = df[df.id_kayu==selected].iloc[0]
-            c1,c2=st.columns(2)
-            with c1:
-                nama2=st.text_input("Nama", value=r.nama_kayu)
-                satuan2=st.selectbox("Satuan", ["Batang","Kubik","Papan","Balok","Lembar"], index=["Batang","Kubik","Papan","Balok","Lembar"].index(r.satuan) if r.satuan in ["Batang","Kubik","Papan","Balok","Lembar"] else 0)
-            with c2:
-                harga2=st.number_input("Harga", min_value=0.0, value=float(r.harga), step=1000.0)
-                stok2=st.number_input("Stok", min_value=0, value=int(r.stok), step=1)
-            a,b=st.columns(2)
-            with a:
-                if st.button("Simpan Perubahan", use_container_width=True):
-                    execute("UPDATE kayu SET nama_kayu=?,satuan=?,harga=?,stok=? WHERE id_kayu=?", (nama2,satuan2,harga2,stok2,int(selected)))
-                    st.success("Data diperbarui."); st.rerun()
-            with b:
-                if st.button("Hapus Barang", use_container_width=True):
-                    try:
-                        execute("DELETE FROM kayu WHERE id_kayu=?", (int(selected),))
-                        st.success("Data dihapus."); st.rerun()
-                    except sqlite3.IntegrityError:
-                        st.error("Barang tidak dapat dihapus karena sudah digunakan dalam transaksi.")
+            st.divider()
+            st.subheader("🗑️ Hapus Data Kayu")
+            st.warning(
+                "Kayu yang sudah digunakan dalam transaksi "
+                "tidak dapat dihapus."
+            )
+
+            yakin = st.checkbox(
+                "Saya yakin ingin menghapus kayu ini",
+                key=f"konfirmasi_hapus_kayu_{pilihan_id}",
+            )
+
+            if st.button(
+                "🗑️ Hapus Data Kayu",
+                use_container_width=True,
+                disabled=not yakin,
+                key="button_hapus_kayu",
+            ):
+                try:
+                    with db() as conn:
+                        conn.execute(
+                            "DELETE FROM kayu WHERE id_kayu = ?",
+                            (pilihan_id,),
+                        )
+                except sqlite3.IntegrityError:
+                    st.error(
+                        "Data tidak dapat dihapus karena sudah "
+                        "digunakan dalam transaksi."
+                    )
+                else:
+                    set_flash("Data kayu berhasil dihapus.")
+                    st.rerun()
+
+    with tab_tambah:
+        st.subheader("➕ Tambah Data Kayu")
+
+        with st.form("form_tambah_data_kayu", clear_on_submit=True):
+            nama = st.text_input("Nama Kayu", placeholder="Contoh: Kayu Jati")
+            satuan = st.selectbox("Satuan", DAFTAR_SATUAN)
+            harga = st.number_input("Harga", min_value=0, value=0, step=1000)
+            stok = st.number_input("Stok Awal", min_value=0, value=0, step=1)
+            tambah = st.form_submit_button(
+                "➕ Tambahkan Kayu", use_container_width=True
+            )
+
+        if tambah:
+            if not nama.strip():
+                st.error("Nama kayu wajib diisi.")
+            elif harga <= 0:
+                st.error("Harga harus lebih dari 0.")
+            else:
+                with db() as conn:
+                    conn.execute(
+                        "INSERT INTO kayu (nama_kayu, satuan, harga, stok) "
+                        "VALUES (?, ?, ?, ?)",
+                        (nama.strip(), satuan, harga, stok),
+                    )
+                set_flash("Data kayu berhasil ditambahkan.")
+                st.rerun()
+
 
 # =========================================================
-# PEMBELIAN PLACEHOLDER - schema user tidak memiliki tabel pembelian
+# STOK
 # =========================================================
-def pembelian():
-    page_head("Pembelian", "Modul pembelian mengikuti navigasi UI, tetapi database yang diberikan belum memiliki tabel pembelian.")
-    st.markdown("<div class='notice'><b>Belum terhubung ke database.</b><br>Database saat ini hanya menyediakan users, kayu, pelanggan, penjualan, dan detail_penjualan. Tabel pembelian/pemasok belum tersedia.</div>", unsafe_allow_html=True)
+
+def halaman_stok():
+    st.title("📦 Stok Kayu")
+
+    df = query_df("""
+        SELECT id_kayu AS 'ID', nama_kayu AS 'Nama Kayu',
+               satuan AS 'Satuan', stok AS 'Stok', harga AS 'Harga'
+        FROM kayu
+        ORDER BY stok ASC
+    """)
+
+    if df.empty:
+        st.info("Belum ada data stok.")
+        return
+
+    tabel = df.copy()
+    tabel["Status"] = tabel["Stok"].apply(status_stok)
+    tabel["Harga"] = tabel["Harga"].apply(rupiah)
+    st.dataframe(tabel, use_container_width=True, hide_index=True)
+
+    st.divider()
+
+    c1, c2, c3 = st.columns(3)
+    c1.metric("🔴 Sangat Rendah", int((df["Stok"] <= STOK_SANGAT_RENDAH).sum()))
+    c2.metric(
+        "🟠 Rendah",
+        int(
+            (
+                (df["Stok"] > STOK_SANGAT_RENDAH)
+                & (df["Stok"] <= STOK_RENDAH)
+            ).sum()
+        ),
+    )
+    c3.metric("🟢 Aman", int((df["Stok"] > STOK_RENDAH).sum()))
+
+
+# =========================================================
+# PELANGGAN
+# =========================================================
+
+def halaman_pelanggan():
+    st.title("👥 Data Pelanggan")
+
+    tab_data, tab_tambah = st.tabs(
+        ["📋 Data Pelanggan", "➕ Tambah Pelanggan"]
+    )
+
+    with tab_data:
+        df = query_df("""
+            SELECT id_pelanggan AS 'ID',
+                   nama_pelanggan AS 'Nama Pelanggan',
+                   no_telepon AS 'No. Telepon',
+                   alamat AS 'Alamat'
+            FROM pelanggan
+            ORDER BY id_pelanggan DESC
+        """)
+
+        if df.empty:
+            st.info("Belum ada data pelanggan.")
+        else:
+            st.dataframe(df, use_container_width=True, hide_index=True)
+
+            st.divider()
+            st.subheader("✏️ Edit Pelanggan")
+
+            nama_map = dict(zip(df["ID"].tolist(), df["Nama Pelanggan"]))
+
+            pilihan_id = int(
+                st.selectbox(
+                    "Pilih pelanggan",
+                    df["ID"].tolist(),
+                    format_func=lambda x: f"ID {x} - {nama_map[x]}",
+                    key="select_edit_pelanggan",
+                )
+            )
+
+            with db() as conn:
+                data = conn.execute(
+                    "SELECT * FROM pelanggan WHERE id_pelanggan = ?",
+                    (pilihan_id,),
+                ).fetchone()
+                jumlah_transaksi = conn.execute(
+                    "SELECT COUNT(*) AS n FROM penjualan "
+                    "WHERE id_pelanggan = ?",
+                    (pilihan_id,),
+                ).fetchone()["n"]
+
+            with st.form(f"form_edit_pelanggan_{pilihan_id}"):
+                nama = st.text_input(
+                    "Nama Pelanggan", value=data["nama_pelanggan"]
+                )
+                telepon = st.text_input(
+                    "No. Telepon", value=data["no_telepon"] or ""
+                )
+                alamat = st.text_area("Alamat", value=data["alamat"] or "")
+                simpan = st.form_submit_button(
+                    "💾 Simpan Perubahan", use_container_width=True
+                )
+
+            if simpan:
+                if not nama.strip():
+                    st.error("Nama pelanggan wajib diisi.")
+                else:
+                    with db() as conn:
+                        conn.execute(
+                            "UPDATE pelanggan SET nama_pelanggan = ?, "
+                            "no_telepon = ?, alamat = ? "
+                            "WHERE id_pelanggan = ?",
+                            (
+                                nama.strip(),
+                                telepon.strip(),
+                                alamat.strip(),
+                                pilihan_id,
+                            ),
+                        )
+                    set_flash("Data pelanggan berhasil diperbarui.")
+                    st.rerun()
+
+            st.divider()
+            st.subheader("🗑️ Hapus Pelanggan")
+
+            if jumlah_transaksi > 0:
+                st.warning(
+                    f"Pelanggan ini memiliki {jumlah_transaksi} transaksi. "
+                    "Jika dihapus, transaksi tetap ada tetapi nama "
+                    "pelanggannya tampil sebagai '-'."
+                )
+
+            yakin = st.checkbox(
+                "Saya yakin ingin menghapus pelanggan ini",
+                key=f"konfirmasi_hapus_pelanggan_{pilihan_id}",
+            )
+
+            if st.button(
+                "🗑️ Hapus Pelanggan",
+                use_container_width=True,
+                disabled=not yakin,
+                key="button_hapus_pelanggan",
+            ):
+                with db() as conn:
+                    conn.execute(
+                        "DELETE FROM pelanggan WHERE id_pelanggan = ?",
+                        (pilihan_id,),
+                    )
+                set_flash("Pelanggan berhasil dihapus.")
+                st.rerun()
+
+    with tab_tambah:
+        with st.form("form_tambah_pelanggan", clear_on_submit=True):
+            nama = st.text_input("Nama Pelanggan")
+            telepon = st.text_input("No. Telepon")
+            alamat = st.text_area("Alamat")
+            tambah = st.form_submit_button(
+                "➕ Tambahkan Pelanggan", use_container_width=True
+            )
+
+        if tambah:
+            if not nama.strip():
+                st.error("Nama pelanggan wajib diisi.")
+            else:
+                with db() as conn:
+                    conn.execute(
+                        "INSERT INTO pelanggan "
+                        "(nama_pelanggan, no_telepon, alamat) "
+                        "VALUES (?, ?, ?)",
+                        (nama.strip(), telepon.strip(), alamat.strip()),
+                    )
+                set_flash("Pelanggan berhasil ditambahkan.")
+                st.rerun()
+
 
 # =========================================================
 # PENJUALAN
 # =========================================================
-def penjualan():
-    page_head("Penjualan", "Buat transaksi baru dengan tampilan dan alur yang mengikuti UI HTML.")
-    pelanggan = qdf("SELECT * FROM pelanggan ORDER BY nama_pelanggan")
-    kayu = qdf("SELECT * FROM kayu WHERE stok>0 ORDER BY nama_kayu")
-    if kayu.empty:
-        st.markdown("<div class='alert'>Tidak ada stok kayu yang tersedia.</div>", unsafe_allow_html=True)
+
+def simpan_transaksi(id_pelanggan, total):
+    """Simpan transaksi + kurangi stok secara atomik. Return ID transaksi."""
+    with db() as conn:
+        conn.execute("BEGIN IMMEDIATE")
+
+        # Cek stok terbaru dari database
+        for item in st.session_state.cart_items:
+            row = conn.execute(
+                "SELECT stok FROM kayu WHERE id_kayu = ?",
+                (item["id_kayu"],),
+            ).fetchone()
+
+            if row is None:
+                raise ValueError(
+                    f"Kayu {item['nama_kayu']} tidak ditemukan."
+                )
+            if int(row["stok"]) < int(item["jumlah"]):
+                raise ValueError(
+                    f"Stok {item['nama_kayu']} tidak mencukupi."
+                )
+
+        tanggal = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+        cursor = conn.execute(
+            "INSERT INTO penjualan (tanggal, id_pelanggan, id_user, total) "
+            "VALUES (?, ?, ?, ?)",
+            (
+                tanggal,
+                id_pelanggan,
+                st.session_state.current_user_id,
+                total,
+            ),
+        )
+        id_transaksi = cursor.lastrowid
+
+        for item in st.session_state.cart_items:
+            conn.execute(
+                "INSERT INTO detail_penjualan "
+                "(id_penjualan, id_kayu, jumlah, harga, subtotal) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (
+                    id_transaksi,
+                    item["id_kayu"],
+                    item["jumlah"],
+                    item["harga"],
+                    item["subtotal"],
+                ),
+            )
+            conn.execute(
+                "UPDATE kayu SET stok = stok - ? WHERE id_kayu = ?",
+                (item["jumlah"], item["id_kayu"]),
+            )
+
+    return id_transaksi
+
+
+def halaman_penjualan():
+    st.title("🛒 Transaksi Penjualan")
+
+    pelanggan_df = query_df(
+        "SELECT id_pelanggan, nama_pelanggan FROM pelanggan "
+        "ORDER BY nama_pelanggan"
+    )
+    kayu_df = query_df(
+        "SELECT id_kayu, nama_kayu, satuan, harga, stok FROM kayu "
+        "ORDER BY nama_kayu"
+    )
+
+    if pelanggan_df.empty:
+        st.warning("Belum ada pelanggan. Tambahkan pelanggan terlebih dahulu.")
         return
 
-    c1,c2 = st.columns([1.2,1])
-    with c1:
-        if pelanggan.empty:
-            pelanggan_id=None
-            st.warning("Belum ada pelanggan. Transaksi akan dicatat sebagai Umum.")
-        else:
-            pelanggan_id=st.selectbox("Pelanggan", [None]+pelanggan.id_pelanggan.tolist(), format_func=lambda x: "Umum" if x is None else pelanggan.loc[pelanggan.id_pelanggan==x,"nama_pelanggan"].iloc[0])
-    with c2:
-        tanggal=st.date_input("Tanggal Transaksi", value=date.today())
+    if kayu_df.empty:
+        st.warning("Belum ada data kayu.")
+        return
 
-    st.markdown("<div class='section-head'><div><h2>Tambah Item</h2><span class='muted'>Pilih barang, jumlah, lalu masukkan ke keranjang</span></div></div>", unsafe_allow_html=True)
-    a,b,c=st.columns([2,1,1])
-    with a:
-        kayu_id=st.selectbox("Barang", kayu.id_kayu.tolist(), format_func=lambda x: f"{kayu.loc[kayu.id_kayu==x,'nama_kayu'].iloc[0]} • Stok {int(kayu.loc[kayu.id_kayu==x,'stok'].iloc[0])}")
-    r=kayu[kayu.id_kayu==kayu_id].iloc[0]
-    with b:
-        st.text_input("Harga", rupiah(r.harga), disabled=True)
-    with c:
-        jumlah=st.number_input("Jumlah", min_value=1, max_value=max(1,int(r.stok)), value=1, step=1)
-    st.markdown(f"<div class='notice'>Subtotal: <b>{rupiah(float(r.harga)*int(jumlah))}</b></div>", unsafe_allow_html=True)
-    if st.button("Masukkan ke Keranjang", use_container_width=True):
-        existing=next((x for x in st.session_state.cart_items if x["id_kayu"]==int(kayu_id)),None)
-        if existing:
-            new_qty=existing["jumlah"]+int(jumlah)
-            if new_qty>int(r.stok): st.error("Jumlah keranjang melebihi stok.")
-            else:
-                existing["jumlah"]=new_qty; existing["subtotal"]=new_qty*float(r.harga); st.rerun()
+    # ---------------- 1. Pelanggan ----------------
+    st.subheader("1. Data Pelanggan")
+
+    pelanggan_dict = dict(
+        zip(
+            pelanggan_df["id_pelanggan"].tolist(),
+            pelanggan_df["nama_pelanggan"],
+        )
+    )
+
+    id_pelanggan = int(
+        st.selectbox(
+            "Pilih Pelanggan",
+            list(pelanggan_dict.keys()),
+            format_func=lambda x: pelanggan_dict[x],
+            key="select_pelanggan_transaksi",
+        )
+    )
+
+    st.divider()
+
+    # ---------------- 2. Tambah barang ----------------
+    st.subheader("2. Tambahkan Barang")
+
+    kayu_label = {
+        int(r.id_kayu): f"{r.nama_kayu} | Stok: {r.stok}"
+        for r in kayu_df.itertuples()
+    }
+
+    col1, col2, col3 = st.columns([3, 2, 2])
+
+    with col1:
+        id_kayu = int(
+            st.selectbox(
+                "Pilih Kayu",
+                list(kayu_label.keys()),
+                format_func=lambda x: kayu_label[x],
+                key="select_kayu_transaksi",
+            )
+        )
+
+    data_kayu = kayu_df[kayu_df["id_kayu"] == id_kayu].iloc[0]
+    harga_kayu = float(data_kayu["harga"])
+    stok_tersedia = int(data_kayu["stok"])
+
+    with col2:
+        st.text_input(
+            "Harga",
+            value=rupiah(harga_kayu),
+            disabled=True,
+            key=f"display_harga_{id_kayu}",
+        )
+
+    with col3:
+        if stok_tersedia > 0:
+            # key memuat id_kayu agar tidak error saat max_value berubah
+            jumlah = st.number_input(
+                "Jumlah",
+                min_value=1,
+                max_value=stok_tersedia,
+                value=1,
+                step=1,
+                key=f"jumlah_transaksi_{id_kayu}",
+            )
         else:
-            st.session_state.cart_items.append({"id_kayu":int(kayu_id),"nama_kayu":r.nama_kayu,"satuan":r.satuan,"harga":float(r.harga),"jumlah":int(jumlah),"subtotal":float(r.harga)*int(jumlah)})
+            st.warning("Stok habis.")
+            jumlah = 0
+
+    st.info(f"Subtotal: **{rupiah(harga_kayu * int(jumlah))}**")
+
+    if st.button(
+        "➕ Masukkan ke Keranjang",
+        use_container_width=True,
+        key="button_tambah_keranjang",
+    ):
+        if stok_tersedia <= 0 or jumlah <= 0:
+            st.error("Stok kayu habis.")
+        else:
+            jumlah = int(jumlah)
+            item = next(
+                (
+                    i for i in st.session_state.cart_items
+                    if i["id_kayu"] == id_kayu
+                ),
+                None,
+            )
+
+            if item is None:
+                st.session_state.cart_items.append({
+                    "id_kayu": id_kayu,
+                    "nama_kayu": data_kayu["nama_kayu"],
+                    "satuan": data_kayu["satuan"],
+                    "harga": harga_kayu,
+                    "jumlah": jumlah,
+                    "subtotal": harga_kayu * jumlah,
+                })
+                set_flash("Barang berhasil dimasukkan ke keranjang.")
+            else:
+                jumlah_baru = item["jumlah"] + jumlah
+                if jumlah_baru > stok_tersedia:
+                    set_flash(
+                        "Jumlah di keranjang melebihi stok tersedia.",
+                        "error",
+                    )
+                else:
+                    item["jumlah"] = jumlah_baru
+                    item["subtotal"] = jumlah_baru * item["harga"]
+                    set_flash("Jumlah barang diperbarui.")
+
             st.rerun()
 
-    st.markdown("<div class='section-head'><div><h2>Keranjang Penjualan</h2></div></div>", unsafe_allow_html=True)
-    if not st.session_state.cart_items:
-        st.markdown("<div class='alert'>Keranjang masih kosong.</div>", unsafe_allow_html=True)
+    st.divider()
+
+    # ---------------- 3. Keranjang ----------------
+    st.subheader("3. Keranjang Penjualan")
+
+    cart = st.session_state.cart_items
+
+    if not cart:
+        st.info("Keranjang masih kosong.")
         return
-    body="".join([f"<tr><td>{i+1}</td><td><b>{esc(x['nama_kayu'])}</b></td><td>{x['jumlah']} {esc(x['satuan'])}</td><td>{rupiah(x['harga'])}</td><td><b>{rupiah(x['subtotal'])}</b></td></tr>" for i,x in enumerate(st.session_state.cart_items)])
-    st.markdown(f"<table class='html-table'><thead><tr><th>No</th><th>Barang</th><th>Jumlah</th><th>Harga</th><th>Subtotal</th></tr></thead><tbody>{body}</tbody></table>", unsafe_allow_html=True)
-    total=sum(x["subtotal"] for x in st.session_state.cart_items)
-    st.markdown(f"<div class='card' style='margin-top:12px;text-align:right'><span class='muted'>Total Pembayaran</span><div style='font-size:27px;font-weight:700'>{rupiah(total)}</div></div>", unsafe_allow_html=True)
-    remove=st.selectbox("Pilih item untuk dihapus", range(len(st.session_state.cart_items)), format_func=lambda i: st.session_state.cart_items[i]["nama_kayu"])
-    a,b=st.columns(2)
-    with a:
-        if st.button("Hapus dari Keranjang", use_container_width=True):
-            st.session_state.cart_items.pop(remove); st.rerun()
-    with b:
-        if st.button("Simpan Transaksi", use_container_width=True):
-            conn=get_db()
-            try:
-                for x in st.session_state.cart_items:
-                    latest=conn.execute("SELECT stok FROM kayu WHERE id_kayu=?",(x["id_kayu"],)).fetchone()
-                    if not latest or latest["stok"]<x["jumlah"]: raise Exception(f"Stok {x['nama_kayu']} tidak mencukupi.")
-                cur=conn.cursor()
-                cur.execute("INSERT INTO penjualan (tanggal,id_pelanggan,id_user,total) VALUES (?,?,?,?)",(datetime.combine(tanggal,datetime.min.time()).strftime("%Y-%m-%d %H:%M:%S"),pelanggan_id,st.session_state.current_user_id,total))
-                pid=cur.lastrowid
-                for x in st.session_state.cart_items:
-                    cur.execute("INSERT INTO detail_penjualan (id_penjualan,id_kayu,jumlah,harga,subtotal) VALUES (?,?,?,?,?)",(pid,x["id_kayu"],x["jumlah"],x["harga"],x["subtotal"]))
-                    cur.execute("UPDATE kayu SET stok=stok-? WHERE id_kayu=?",(x["jumlah"],x["id_kayu"]))
-                conn.commit(); st.session_state.cart_items=[]; st.session_state.current_page="Penjualan"; st.success(f"Transaksi #{pid} berhasil disimpan."); st.rerun()
-            except Exception as e:
-                conn.rollback(); st.error(str(e))
-            finally:
-                conn.close()
+
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "No": no,
+                "Kayu": item["nama_kayu"],
+                "Satuan": item["satuan"],
+                "Harga": rupiah(item["harga"]),
+                "Jumlah": item["jumlah"],
+                "Subtotal": rupiah(item["subtotal"]),
+            }
+            for no, item in enumerate(cart, start=1)
+        ]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    total = sum(item["subtotal"] for item in cart)
+    st.markdown(f"## 💰 Total: {rupiah(total)}")
+
+    pilihan_hapus = st.selectbox(
+        "Pilih barang untuk dihapus",
+        range(len(cart)),
+        format_func=lambda x: cart[x]["nama_kayu"],
+        key="select_hapus_keranjang",
+    )
+
+    if st.button(
+        "🗑️ Hapus Barang",
+        use_container_width=True,
+        key="button_hapus_keranjang",
+    ):
+        cart.pop(pilihan_hapus)
+        set_flash("Barang dihapus dari keranjang.")
+        st.rerun()
+
+    st.divider()
+
+    # ---------------- 4. Simpan ----------------
+    st.subheader("4. Simpan Transaksi")
+
+    if st.button(
+        "💾 SIMPAN TRANSAKSI",
+        type="primary",
+        use_container_width=True,
+        key="button_simpan_transaksi",
+    ):
+        try:
+            id_transaksi = simpan_transaksi(id_pelanggan, total)
+        except ValueError as error:
+            st.error(f"Transaksi gagal: {error}")
+        except Exception as error:
+            st.error(f"Transaksi gagal: {error}")
+        else:
+            st.session_state.cart_items = []
+            set_flash(
+                f"Transaksi berhasil disimpan. ID Transaksi: {id_transaksi}"
+            )
+            st.session_state.pending_page = "Riwayat Transaksi"
+            st.rerun()
+
 
 # =========================================================
-# PELANGGAN & PEMASOK
+# RIWAYAT TRANSAKSI
 # =========================================================
-def pelanggan_pemasok():
-    page_head("Pelanggan & Pemasok", "Kelola data rekanan sesuai struktur database yang tersedia.")
-    tab1,tab2=st.tabs(["Pelanggan","Pemasok"])
-    with tab1:
-        df=qdf("SELECT * FROM pelanggan ORDER BY id_pelanggan DESC")
-        search=st.text_input("Cari pelanggan", key="search_pelanggan")
-        if search: df=df[df.nama_pelanggan.str.contains(search,case=False,na=False)]
-        body="".join([f"<tr><td>{int(r.id_pelanggan)}</td><td><b>{esc(r.nama_pelanggan)}</b></td><td>{esc(r.no_telepon)}</td><td>{esc(r.alamat)}</td></tr>" for _,r in df.iterrows()])
-        if body: st.markdown(f"<table class='html-table'><thead><tr><th>ID</th><th>Nama</th><th>Kontak</th><th>Alamat</th></tr></thead><tbody>{body}</tbody></table>",unsafe_allow_html=True)
-        else: st.markdown("<div class='alert'>Belum ada data pelanggan.</div>",unsafe_allow_html=True)
-        with st.expander("+ Tambah Pelanggan"):
-            with st.form("add_pelanggan"):
-                nama=st.text_input("Nama Pelanggan"); tel=st.text_input("No. Telepon"); alamat=st.text_area("Alamat")
-                if st.form_submit_button("Simpan Data",use_container_width=True):
-                    if not nama.strip(): st.error("Nama pelanggan wajib diisi.")
-                    else: execute("INSERT INTO pelanggan (nama_pelanggan,no_telepon,alamat) VALUES (?,?,?)",(nama,tel,alamat)); st.success("Pelanggan ditambahkan."); st.rerun()
-    with tab2:
-        st.markdown("<div class='notice'><b>Pemasok belum tersedia di database.</b><br>HTML asli memiliki tab pemasok, tetapi schema SQLite yang diberikan belum mempunyai tabel pemasok.</div>",unsafe_allow_html=True)
+
+def halaman_riwayat():
+    st.title("📜 Riwayat Transaksi")
+
+    df = query_df("""
+        SELECT p.id_penjualan AS 'ID Transaksi',
+               p.tanggal AS 'Tanggal',
+               COALESCE(pl.nama_pelanggan, '-') AS 'Pelanggan',
+               COALESCE(u.nama, '-') AS 'Admin',
+               p.total AS 'Total'
+        FROM penjualan p
+        LEFT JOIN pelanggan pl ON p.id_pelanggan = pl.id_pelanggan
+        LEFT JOIN users u ON p.id_user = u.id_user
+        ORDER BY p.id_penjualan DESC
+    """)
+
+    if df.empty:
+        st.info("Belum ada transaksi.")
+        return
+
+    tabel = df.copy()
+    tabel["Total"] = tabel["Total"].apply(rupiah)
+    st.dataframe(tabel, use_container_width=True, hide_index=True)
+
+    st.divider()
+    st.subheader("🧾 Detail Transaksi")
+
+    id_transaksi = int(
+        st.selectbox(
+            "Pilih ID Transaksi",
+            df["ID Transaksi"].tolist(),
+            key="select_detail_transaksi",
+        )
+    )
+
+    tampilkan_detail_transaksi(id_transaksi)
+
+
+def tampilkan_detail_transaksi(id_transaksi):
+    with db() as conn:
+        transaksi = conn.execute(
+            """
+            SELECT p.*,
+                   COALESCE(pl.nama_pelanggan, '-') AS nama_pelanggan,
+                   COALESCE(pl.no_telepon, '-') AS no_telepon,
+                   COALESCE(pl.alamat, '-') AS alamat,
+                   COALESCE(u.nama, '-') AS nama_admin
+            FROM penjualan p
+            LEFT JOIN pelanggan pl ON p.id_pelanggan = pl.id_pelanggan
+            LEFT JOIN users u ON p.id_user = u.id_user
+            WHERE p.id_penjualan = ?
+            """,
+            (id_transaksi,),
+        ).fetchone()
+
+        detail = conn.execute(
+            """
+            SELECT d.*, k.nama_kayu, k.satuan
+            FROM detail_penjualan d
+            JOIN kayu k ON d.id_kayu = k.id_kayu
+            WHERE d.id_penjualan = ?
+            ORDER BY d.id_detail
+            """,
+            (id_transaksi,),
+        ).fetchall()
+
+    if transaksi is None:
+        st.error("Transaksi tidak ditemukan.")
+        return
+
+    col1, col2 = st.columns(2)
+
+    with col1:
+        st.write(f"**ID Transaksi:** {transaksi['id_penjualan']}")
+        st.write(f"**Tanggal:** {transaksi['tanggal']}")
+
+    with col2:
+        st.write(f"**Pelanggan:** {transaksi['nama_pelanggan']}")
+        st.write(f"**Admin:** {transaksi['nama_admin']}")
+
+    st.dataframe(
+        pd.DataFrame([
+            {
+                "Kayu": item["nama_kayu"],
+                "Satuan": item["satuan"],
+                "Jumlah": item["jumlah"],
+                "Harga": rupiah(item["harga"]),
+                "Subtotal": rupiah(item["subtotal"]),
+            }
+            for item in detail
+        ]),
+        use_container_width=True,
+        hide_index=True,
+    )
+
+    st.markdown(f"## 💰 Total: {rupiah(transaksi['total'])}")
+
+    garis = "=" * 40
+    strip = "-" * 40
+
+    nota = [
+        garis,
+        "          NOTA PENJUALAN KAYU",
+        garis,
+        f"ID Transaksi : {transaksi['id_penjualan']}",
+        f"Tanggal      : {transaksi['tanggal']}",
+        f"Pelanggan    : {transaksi['nama_pelanggan']}",
+        f"No. Telepon  : {transaksi['no_telepon']}",
+        strip,
+    ]
+
+    for item in detail:
+        nota.append(
+            f"{item['nama_kayu']} ({item['jumlah']} {item['satuan']})"
+        )
+        nota.append(
+            f"{rupiah(item['harga'])} x {item['jumlah']} = "
+            f"{rupiah(item['subtotal'])}"
+        )
+
+    nota += [
+        strip,
+        f"TOTAL: {rupiah(transaksi['total'])}",
+        garis,
+        f"Admin: {transaksi['nama_admin']}",
+        garis,
+    ]
+
+    st.download_button(
+        "⬇️ Download Nota",
+        data="\n".join(nota) + "\n",
+        file_name=f"nota_{id_transaksi}.txt",
+        mime="text/plain",
+        use_container_width=True,
+        key=f"button_download_nota_{id_transaksi}",
+    )
+
 
 # =========================================================
 # LAPORAN
 # =========================================================
-def laporan():
-    page_head("Laporan", "Laporan penjualan dan stok kayu.")
-    tab1,tab2=st.tabs(["Laporan Penjualan","Laporan Stok"])
-    with tab1:
-        c1,c2=st.columns(2)
-        with c1: awal=st.date_input("Tanggal Awal", value=date.today()-timedelta(days=30))
-        with c2: akhir=st.date_input("Tanggal Akhir", value=date.today())
-        df=qdf("""
-            SELECT p.id_penjualan,p.tanggal,COALESCE(pl.nama_pelanggan,'Umum') pelanggan,p.total
-            FROM penjualan p LEFT JOIN pelanggan pl ON p.id_pelanggan=pl.id_pelanggan
-            WHERE date(p.tanggal) BETWEEN ? AND ? ORDER BY p.id_penjualan DESC
-        """,(awal.isoformat(),akhir.isoformat()))
-        total=float(df.total.sum()) if not df.empty else 0
-        a,b=st.columns(2); a.metric("Jumlah Transaksi",len(df)); b.metric("Total Penjualan",rupiah(total))
-        if not df.empty:
-            body="".join([f"<tr><td>#{int(r.id_penjualan)}</td><td>{esc(r.tanggal)}</td><td>{esc(r.pelanggan)}</td><td>{rupiah(r.total)}</td></tr>" for _,r in df.iterrows()])
-            st.markdown(f"<table class='html-table'><thead><tr><th>ID</th><th>Tanggal</th><th>Pelanggan</th><th>Total</th></tr></thead><tbody>{body}</tbody></table>",unsafe_allow_html=True)
-            st.download_button("Download CSV",df.to_csv(index=False).encode("utf-8"),"laporan_penjualan.csv","text/csv",use_container_width=True)
-        else: st.markdown("<div class='alert'>Tidak ada transaksi pada periode tersebut.</div>",unsafe_allow_html=True)
-    with tab2:
-        df=qdf("SELECT * FROM kayu ORDER BY nama_kayu")
-        if not df.empty:
-            body=""
-            for _,r in df.iterrows():
-                status="Sangat Rendah" if r.stok<=5 else ("Rendah" if r.stok<=10 else "Aman")
-                cls="badge-red" if r.stok<=5 else ("badge-orange" if r.stok<=10 else "badge-green")
-                body+=f"<tr><td>{int(r.id_kayu)}</td><td><b>{esc(r.nama_kayu)}</b></td><td>{int(r.stok)} {esc(r.satuan)}</td><td>{rupiah(r.harga)}</td><td><span class='badge {cls}'>{status}</span></td></tr>"
-            st.markdown(f"<table class='html-table'><thead><tr><th>ID</th><th>Kayu</th><th>Stok</th><th>Harga</th><th>Status</th></tr></thead><tbody>{body}</tbody></table>",unsafe_allow_html=True)
-            st.download_button("Download Stok CSV",df.to_csv(index=False).encode("utf-8"),"laporan_stok.csv","text/csv",use_container_width=True)
+
+def halaman_laporan():
+    st.title("📑 Laporan")
+
+    tab_penjualan, tab_stok = st.tabs(
+        ["💰 Laporan Penjualan", "📦 Laporan Stok"]
+    )
+
+    # ---------------- Laporan penjualan ----------------
+    with tab_penjualan:
+        st.subheader("💰 Laporan Penjualan")
+
+        df = query_df("""
+            SELECT p.id_penjualan AS 'ID Transaksi',
+                   p.tanggal AS 'Tanggal',
+                   COALESCE(pl.nama_pelanggan, '-') AS 'Pelanggan',
+                   p.total AS 'Total'
+            FROM penjualan p
+            LEFT JOIN pelanggan pl ON p.id_pelanggan = pl.id_pelanggan
+            ORDER BY p.id_penjualan DESC
+        """)
+
+        if df.empty:
+            st.info("Belum ada data penjualan.")
+        else:
+            df["Tanggal"] = pd.to_datetime(df["Tanggal"])
+
+            # Tanpa key: default ikut berubah saat ada transaksi baru
+            tanggal_awal = st.date_input(
+                "Tanggal Awal", value=df["Tanggal"].min().date()
+            )
+            tanggal_akhir = st.date_input(
+                "Tanggal Akhir", value=df["Tanggal"].max().date()
+            )
+
+            if tanggal_awal > tanggal_akhir:
+                st.error(
+                    "Tanggal awal tidak boleh lebih besar dari "
+                    "tanggal akhir."
+                )
+            else:
+                hasil = df[
+                    (df["Tanggal"].dt.date >= tanggal_awal)
+                    & (df["Tanggal"].dt.date <= tanggal_akhir)
+                ].copy()
+
+                hasil["Tanggal"] = hasil["Tanggal"].dt.strftime(
+                    "%d-%m-%Y %H:%M"
+                )
+
+                c1, c2 = st.columns(2)
+                c1.metric("Jumlah Transaksi", len(hasil))
+                c2.metric("Total Penjualan", rupiah(hasil["Total"].sum()))
+
+                tampil = hasil.copy()
+                tampil["Total"] = tampil["Total"].apply(rupiah)
+                st.dataframe(
+                    tampil, use_container_width=True, hide_index=True
+                )
+
+                # CSV memakai Total numerik agar bisa dihitung di Excel
+                st.download_button(
+                    "⬇️ Download Laporan Penjualan",
+                    data=hasil.to_csv(index=False).encode("utf-8"),
+                    file_name="laporan_penjualan.csv",
+                    mime="text/csv",
+                    use_container_width=True,
+                    key="button_download_laporan_penjualan",
+                )
+
+    # ---------------- Laporan stok ----------------
+    with tab_stok:
+        st.subheader("📦 Laporan Stok Kayu")
+
+        df = query_df("""
+            SELECT id_kayu AS 'ID', nama_kayu AS 'Nama Kayu',
+                   satuan AS 'Satuan', stok AS 'Stok', harga AS 'Harga'
+            FROM kayu
+            ORDER BY stok ASC
+        """)
+
+        if df.empty:
+            st.info("Belum ada data stok.")
+        else:
+            hasil = df.copy()
+            hasil["Status"] = hasil["Stok"].apply(
+                lambda n: status_stok(n, emoji=False)
+            )
+
+            tampil = hasil.copy()
+            tampil["Harga"] = tampil["Harga"].apply(rupiah)
+            st.dataframe(tampil, use_container_width=True, hide_index=True)
+
+            st.download_button(
+                "⬇️ Download Laporan Stok",
+                data=hasil.to_csv(index=False).encode("utf-8"),
+                file_name="laporan_stok.csv",
+                mime="text/csv",
+                use_container_width=True,
+                key="button_download_laporan_stok",
+            )
+
 
 # =========================================================
-# MAIN
+# MAIN PROGRAM
 # =========================================================
+
 init_db()
 
+HALAMAN = {
+    "Dashboard": halaman_dashboard,
+    "Data Kayu": halaman_data_kayu,
+    "Stok Kayu": halaman_stok,
+    "Pelanggan": halaman_pelanggan,
+    "Penjualan": halaman_penjualan,
+    "Riwayat Transaksi": halaman_riwayat,
+    "Laporan": halaman_laporan,
+}
+
 if not st.session_state.is_logged_in:
-    login_page()
+    halaman_login()
 else:
-    sidebar()
-    topbar()
-    st.markdown("<div class='page-wrap'>", unsafe_allow_html=True)
-    page=st.session_state.current_page
-    if page=="Dashboard": dashboard()
-    elif page=="Barang": barang()
-    elif page=="Pembelian": pembelian()
-    elif page=="Penjualan": penjualan()
-    elif page=="Pelanggan & Pemasok": pelanggan_pemasok()
-    elif page=="Laporan": laporan()
-    else: dashboard()
-    st.markdown("</div>", unsafe_allow_html=True)
+    menu_aktif = tampilkan_sidebar()
+    show_flash()
+    HALAMAN[menu_aktif]()
